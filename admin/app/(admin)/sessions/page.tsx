@@ -21,7 +21,6 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
     confirmed: { label: "Confirmed", cls: "border-blue-200 text-blue-700 bg-blue-50" },
     pending: { label: "Pending", cls: "border-amber-200 text-amber-700 bg-amber-50" },
     "no-show": { label: "No-Show", cls: "border-red-200 text-red-600 bg-red-50" },
-    cancelled: { label: "Cancelled", cls: "border-muted-foreground/20 text-muted-foreground" },
 };
 
 const FILTERS = ["All", "Confirmed", "Completed", "Pending", "No-Show"];
@@ -37,68 +36,69 @@ export default function SessionsPage() {
     });
 
     return (
-        <div className="flex flex-col h-full gap-4 p-5">
-            {/* Header */}
-            <div className="flex items-start justify-between">
+        <div className="flex flex-col h-full gap-4 p-4 md:p-5">
+            <div className="flex items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Sessions</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">Track all clinic sessions and their statuses.</p>
+                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">Sessions</h1>
+                    <p className="text-sm text-muted-foreground mt-0.5 hidden sm:block">Track all clinic sessions and their statuses.</p>
                 </div>
-                <button className="flex items-center gap-1.5 px-3.5 py-2 border border-border rounded-xl text-xs text-muted-foreground hover:bg-white transition-colors bg-white">
+                <button className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs text-muted-foreground hover:bg-white transition-colors bg-white shrink-0">
                     <Filter className="w-3.5 h-3.5" /> Filter
                 </button>
             </div>
 
-            {/* Search + Filter tabs */}
-            <div className="flex items-center gap-3">
-                <div className="relative w-72">
+            {/* Search + filters — wrap on mobile */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className="relative w-full sm:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                     <Input placeholder="Search sessions..." className="pl-9 rounded-xl bg-white" value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
-                <div className="flex items-center gap-1 bg-white rounded-xl p-1">
+                <div className="flex items-center gap-1 bg-white rounded-xl p-1 overflow-x-auto shrink-0">
                     {FILTERS.map((f) => (
-                        <button key={f} onClick={() => setFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all", filter === f ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
+                        <button key={f} onClick={() => setFilter(f)} className={cn("px-2.5 md:px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap", filter === f ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
                             {f}
                         </button>
                     ))}
                 </div>
-                <span className="ml-auto text-xs text-muted-foreground">{filtered.length} sessions</span>
+                <span className="text-xs text-muted-foreground sm:ml-auto">{filtered.length} sessions</span>
             </div>
 
-            {/* Table */}
+            {/* Scrollable table */}
             <div className="bg-white rounded-2xl overflow-hidden flex-1">
-                <table className="w-full text-sm">
-                    <thead className="border-b border-border/60">
-                        <tr>
-                            {["Patient", "Doctor", "Session Type", "Date", "Time", "Status", "Actions"].map((h) => (
-                                <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filtered.map((s) => {
-                            const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.cancelled;
-                            return (
-                                <tr key={s.id} className="border-b border-border/60 hover:bg-muted/30 transition-colors cursor-pointer">
-                                    <td className="px-5 py-3.5 font-medium">{s.patient}</td>
-                                    <td className="px-5 py-3.5 text-muted-foreground">{s.doctor}</td>
-                                    <td className="px-5 py-3.5 text-muted-foreground">{s.type}</td>
-                                    <td className="px-5 py-3.5 text-muted-foreground">{s.date}</td>
-                                    <td className="px-5 py-3.5 text-muted-foreground font-mono">{s.time}</td>
-                                    <td className="px-5 py-3.5">
-                                        <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium", cfg.cls)}>{cfg.label}</Badge>
-                                    </td>
-                                    <td className="px-5 py-3.5">
-                                        <div className="flex items-center gap-3">
-                                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">View</button>
-                                            <button className="text-xs text-red-500 hover:text-red-700 transition-colors">Cancel</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                <div className="overflow-x-auto h-full">
+                    <table className="w-full text-sm min-w-[640px]">
+                        <thead className="border-b border-border/60 sticky top-0 bg-white z-10">
+                            <tr>
+                                {["Patient", "Doctor", "Session Type", "Date", "Time", "Status", "Actions"].map((h) => (
+                                    <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 md:px-5 py-3.5">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map((s) => {
+                                const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.completed;
+                                return (
+                                    <tr key={s.id} className="border-b border-border/60 hover:bg-muted/30 transition-colors cursor-pointer">
+                                        <td className="px-4 md:px-5 py-3.5 font-medium whitespace-nowrap">{s.patient}</td>
+                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.doctor}</td>
+                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.type}</td>
+                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.date}</td>
+                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground font-mono">{s.time}</td>
+                                        <td className="px-4 md:px-5 py-3.5">
+                                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium whitespace-nowrap", cfg.cls)}>{cfg.label}</Badge>
+                                        </td>
+                                        <td className="px-4 md:px-5 py-3.5">
+                                            <div className="flex items-center gap-3">
+                                                <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">View</button>
+                                                <button className="text-xs text-red-500 hover:text-red-700 transition-colors">Cancel</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

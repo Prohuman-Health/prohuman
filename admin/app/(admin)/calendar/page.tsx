@@ -66,7 +66,7 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="flex h-full gap-4 p-5 overflow-hidden">
+        <div className="flex flex-col lg:flex-row h-full gap-4 p-4 md:p-5 overflow-auto lg:overflow-hidden">
             {/* Calendar */}
             <div className="flex flex-col flex-1 min-w-0 gap-4">
                 {/* Header */}
@@ -145,7 +145,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Side panel */}
-            <div className="w-[260px] shrink-0 flex flex-col gap-4">
+            <div className="w-full lg:w-[260px] shrink-0 flex flex-col gap-4">
                 {/* Selected day sessions */}
                 <div className="bg-white rounded-2xl flex flex-col overflow-hidden flex-1">
                     <div className="px-5 py-4 border-b border-border/60">

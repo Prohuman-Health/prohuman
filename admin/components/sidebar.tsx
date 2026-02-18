@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
     ClipboardList, FileText, HelpCircle, Settings,
-    ShieldCheck, LogOut, HelpCircle as Help, Activity,
+    ShieldCheck, LogOut, HelpCircle as Help, Activity, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,17 +25,33 @@ const generalItems = [
     { href: "/help", label: "Help", icon: Help },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+    collapsed?: boolean;
+    onClose?: () => void;
+}
+
+export default function Sidebar({ onClose }: SidebarProps) {
     const pathname = usePathname();
 
     return (
         <aside className="w-[220px] shrink-0 h-full bg-white rounded-2xl shadow-sm flex flex-col overflow-hidden">
             {/* Logo */}
-            <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
-                <div className="w-8 h-8 bg-foreground rounded-xl flex items-center justify-center">
-                    <Activity className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-between px-5 pt-6 pb-5">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 bg-foreground rounded-xl flex items-center justify-center shrink-0">
+                        <Activity className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="font-bold text-[17px] tracking-tight">ProHuman</span>
                 </div>
-                <span className="font-bold text-[17px] tracking-tight">ProHuman</span>
+                {/* Close button — only shown on mobile */}
+                {onClose && (
+                    <button
+                        onClick={onClose}
+                        className="lg:hidden w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
             </div>
 
             {/* Scrollable nav area */}
@@ -49,6 +65,7 @@ export default function Sidebar() {
                             <li key={href}>
                                 <Link
                                     href={href}
+                                    onClick={onClose}
                                     className={cn(
                                         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                                         active
@@ -73,6 +90,7 @@ export default function Sidebar() {
                             <li key={href}>
                                 <Link
                                     href={href}
+                                    onClick={onClose}
                                     className={cn(
                                         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                                         active

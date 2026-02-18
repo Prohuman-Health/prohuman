@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,32 +21,29 @@ export default function SessionTypesPage() {
     const filtered = SESSION_TYPES.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
 
     return (
-        <div className="flex flex-col gap-4 p-5">
-            {/* Header */}
-            <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4 p-4 md:p-5">
+            <div className="flex items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Session Types</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">Define the types of sessions offered at your clinic.</p>
+                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">Session Types</h1>
+                    <p className="text-sm text-muted-foreground mt-0.5 hidden sm:block">Define the types of sessions offered at your clinic.</p>
                 </div>
-                <Button size="sm" className="gap-1.5 rounded-xl">
-                    <Plus className="w-4 h-4" /> New Type
+                <Button size="sm" className="gap-1.5 rounded-xl shrink-0">
+                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Type</span>
                 </Button>
             </div>
 
-            {/* Search */}
-            <div className="relative w-72">
+            <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input placeholder="Search session types..." className="pl-9 rounded-xl bg-white" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
 
-            {/* Cards grid */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Responsive grid: 1 col mobile, 2 col sm, 3 col lg */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 {filtered.map((s) => (
-                    <div key={s.id} className="bg-white rounded-2xl p-5 space-y-4 hover:shadow-sm transition-shadow">
-                        {/* Top row */}
+                    <div key={s.id} className="bg-white rounded-2xl p-4 md:p-5 space-y-4 hover:shadow-sm transition-shadow">
                         <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: s.color + "20" }}>
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: s.color + "20" }}>
                                     <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: s.color }} />
                                 </div>
                                 <p className="font-semibold text-sm leading-tight">{s.name}</p>
@@ -60,22 +57,18 @@ export default function SessionTypesPage() {
                                 </button>
                             </div>
                         </div>
-
-                        {/* Details */}
                         <div className="bg-muted/50 rounded-xl p-3 space-y-2">
                             <div className="flex justify-between text-xs">
                                 <span className="text-muted-foreground">Duration</span>
                                 <span className="font-semibold">{s.duration} min</span>
                             </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Form</span>
-                                <span className={cn("font-semibold", s.formAssigned === "None" ? "text-red-500" : "text-foreground")}>
+                            <div className="flex justify-between text-xs gap-2">
+                                <span className="text-muted-foreground shrink-0">Form</span>
+                                <span className={cn("font-semibold text-right truncate", s.formAssigned === "None" ? "text-red-500" : "text-foreground")}>
                                     {s.formAssigned}
                                 </span>
                             </div>
                         </div>
-
-                        {/* Footer */}
                         <div className="flex items-center justify-between">
                             <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium capitalize",
                                 s.status === "active" ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground"
