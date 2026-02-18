@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-    LayoutDashboard, Users, Stethoscope, CalendarClock,
+    LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
     ClipboardList, FileText, HelpCircle, Settings,
     ShieldCheck, LogOut, HelpCircle as Help, Activity,
 } from "lucide-react";
@@ -14,6 +14,7 @@ const menuItems = [
     { href: "/doctors", label: "Doctors", icon: Stethoscope },
     { href: "/patients", label: "Patients", icon: Users },
     { href: "/sessions", label: "Sessions", icon: CalendarClock },
+    { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/session-types", label: "Session Types", icon: ClipboardList },
     { href: "/forms", label: "Form Builder", icon: FileText },
 ];
@@ -37,10 +38,11 @@ export default function Sidebar() {
                 <span className="font-bold text-[17px] tracking-tight">ProHuman</span>
             </div>
 
-            {/* Menu */}
-            <div className="px-4 mb-1">
+            {/* Scrollable nav area */}
+            <div className="flex-1 overflow-y-auto px-4 py-1">
+                {/* Menu */}
                 <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase px-2 mb-2">Menu</p>
-                <ul className="space-y-0.5">
+                <ul className="space-y-0.5 mb-5">
                     {menuItems.map(({ href, label, icon: Icon }) => {
                         const active = pathname === href;
                         return (
@@ -61,10 +63,8 @@ export default function Sidebar() {
                         );
                     })}
                 </ul>
-            </div>
 
-            {/* General */}
-            <div className="px-4 mt-4 flex-1">
+                {/* General */}
                 <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase px-2 mb-2">General</p>
                 <ul className="space-y-0.5">
                     {generalItems.map(({ href, label, icon: Icon }) => {
@@ -95,8 +95,8 @@ export default function Sidebar() {
                 </ul>
             </div>
 
-            {/* Dark promo card at bottom */}
-            <div className="mx-4 mb-5 rounded-2xl bg-foreground text-white p-4 space-y-2">
+            {/* Dark promo card — always pinned at bottom */}
+            <div className="mx-4 mb-4 mt-3 shrink-0 rounded-2xl bg-foreground text-white p-4 space-y-2">
                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                     <Activity className="w-4 h-4 text-white" />
                 </div>
