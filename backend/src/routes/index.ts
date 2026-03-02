@@ -1,0 +1,44 @@
+import { Router } from "express";
+import authRoutes         from "./auth.routes";
+import branchRoutes       from "./branches.routes";
+import staffRoutes        from "./staff.routes";
+import doctorRoutes       from "./doctors.routes";
+import patientRoutes      from "./patients.routes";
+import sessionRoutes      from "./sessions.routes";
+import sessionTypeRoutes  from "./sessionTypes.routes";
+import formRoutes         from "./forms.routes";
+import questionRoutes     from "./questions.routes";
+import treatmentPlanRoutes from "./treatmentPlans.routes";
+import invoiceRoutes      from "./invoices.routes";
+import waitlistRoutes     from "./waitlist.routes";
+import documentRoutes     from "./documents.routes";
+import consentRoutes      from "./consent.routes";
+import settingsRoutes     from "./settings.routes";
+import customFieldRoutes  from "./customFields.routes";
+import notificationRoutes from "./notifications.routes";
+import billingRoutes      from "./billing.routes";
+import calendarRoutes     from "./calendar.routes";
+
+const router = Router();
+
+router.use("/auth",            authRoutes);
+router.use("/branches",        branchRoutes);
+router.use("/staff",           staffRoutes);
+router.use("/doctors",         doctorRoutes);
+router.use("/patients",        patientRoutes);
+router.use("/sessions",        sessionRoutes);
+router.use("/session-types",   sessionTypeRoutes);
+router.use("/forms",           formRoutes);
+router.use("/questions",       questionRoutes);
+router.use("/treatment-plans", treatmentPlanRoutes);
+router.use("/invoices",        invoiceRoutes);
+router.use("/waitlist",        waitlistRoutes);
+router.use("/documents",       documentRoutes);
+router.use("/consent",         consentRoutes);
+router.use("/settings",        settingsRoutes);
+router.use("/custom-fields",   customFieldRoutes);
+router.use("/notifications",   notificationRoutes);
+router.use("/billing",         billingRoutes);
+router.use("/calendar",        calendarRoutes);
+
+export default router;
