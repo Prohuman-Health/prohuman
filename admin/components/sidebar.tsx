@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
-    ClipboardList, FileText, HelpCircle, Settings,
-    ShieldCheck, LogOut, HelpCircle as Help, Activity, X,
+    ClipboardList, FileText, Settings,
+    ShieldCheck, LogOut, Activity, X,
+    Dumbbell, MessageCircle, BrainCircuit, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 const menuItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -19,10 +21,15 @@ const menuItems = [
     { href: "/forms", label: "Form Builder", icon: FileText },
 ];
 
+const directoryItems = [
+    { href: "/exercises", label: "Exercises", icon: Dumbbell },
+    { href: "/whatsapp", label: "WhatsApp Messages", icon: MessageCircle },
+    { href: "/algorithms", label: "Algorithms", icon: BrainCircuit },
+];
+
 const generalItems = [
     { href: "/staff", label: "Staff & Roles", icon: ShieldCheck },
     { href: "/settings", label: "Settings", icon: Settings },
-    { href: "/help", label: "Help", icon: Help },
 ];
 
 interface SidebarProps {
@@ -32,18 +39,20 @@ interface SidebarProps {
 
 export default function Sidebar({ onClose }: SidebarProps) {
     const pathname = usePathname();
+    const [dirOpen, setDirOpen] = useState(true);
+
+    const isDirectoryActive = directoryItems.some((item) => pathname === item.href);
 
     return (
         <aside className="w-[220px] shrink-0 h-full bg-white rounded-2xl shadow-sm flex flex-col overflow-hidden">
             {/* Logo */}
             <div className="flex items-center justify-between px-5 pt-6 pb-5">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 bg-foreground rounded-xl flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shrink-0">
                         <Activity className="w-4 h-4 text-white" />
                     </div>
                     <span className="font-bold text-[17px] tracking-tight">ProHuman</span>
                 </div>
-                {/* Close button — only shown on mobile */}
                 {onClose && (
                     <button
                         onClick={onClose}
@@ -69,7 +78,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                                     className={cn(
                                         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                                         active
-                                            ? "bg-foreground text-white shadow-sm"
+                                            ? "bg-primary text-white shadow-sm"
                                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                                     )}
                                 >
@@ -80,6 +89,47 @@ export default function Sidebar({ onClose }: SidebarProps) {
                         );
                     })}
                 </ul>
+
+                {/* Directories — collapsible */}
+                <button
+                    onClick={() => setDirOpen((v) => !v)}
+                    className={cn(
+                        "w-full flex items-center justify-between px-2 mb-2 group",
+                        isDirectoryActive && !dirOpen ? "text-foreground" : ""
+                    )}
+                >
+                    <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase group-hover:text-foreground transition-colors">
+                        Directories
+                    </p>
+                    {dirOpen
+                        ? <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                        : <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                    }
+                </button>
+                {dirOpen && (
+                    <ul className="space-y-0.5 mb-5">
+                        {directoryItems.map(({ href, label, icon: Icon }) => {
+                            const active = pathname === href;
+                            return (
+                                <li key={href}>
+                                    <Link
+                                        href={href}
+                                        onClick={onClose}
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                                            active
+                                                ? "bg-primary text-white shadow-sm"
+                                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        )}
+                                    >
+                                        <Icon className="w-4 h-4 shrink-0" />
+                                        {label}
+                                    </Link>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
 
                 {/* General */}
                 <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase px-2 mb-2">General</p>
@@ -94,7 +144,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                                     className={cn(
                                         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
                                         active
-                                            ? "bg-foreground text-white shadow-sm"
+                                            ? "bg-primary text-white shadow-sm"
                                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                                     )}
                                 >
@@ -114,12 +164,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
             </div>
 
             {/* Dark promo card — always pinned at bottom */}
-            <div className="mx-4 mb-4 mt-3 shrink-0 rounded-2xl bg-foreground text-white p-4 space-y-2">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                    <Activity className="w-4 h-4 text-white" />
+            <div className="mx-4 mb-4 mt-3 shrink-0 rounded-2xl p-4 space-y-2" style={{ background: 'linear-gradient(135deg, #304A78 0%, #0A0E28 100%)' }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#DCB13C22' }}>
+                    <Activity className="w-4 h-4" style={{ color: '#DCB13C' }} />
                 </div>
-                <p className="font-bold text-sm leading-tight">ProHuman<br />Health Admin</p>
-                <p className="text-[11px] text-white/60 leading-relaxed">Manage your clinic from one place.</p>
+                <p className="font-bold text-sm leading-tight text-white">ProHuman<br />Health Admin</p>
+                <p className="text-[11px] leading-relaxed" style={{ color: '#57BDA2' }}>Manage your clinic from one place.</p>
             </div>
         </aside>
     );
