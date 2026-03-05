@@ -1,14 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { X, Loader2, ShieldCheck, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Loader2, ShieldCheck, Stethoscope, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useStaff } from "@/lib/contexts/staff-context";
-import { staffApi } from "@/lib/api";
+import { staffApi, doctorsApi } from "@/lib/api";
 
-interface Props { open: boolean; onClose: () => void; }
+interface Props {
+    open: boolean;
+    onClose: () => void;
+    /** When true: locks role to "doctor" and shows specialty / bio fields */
+    doctorMode?: boolean;
+}
 
 // Roles accepted by backend enum: admin | receptionist | doctor
 const ROLES = [
@@ -19,7 +24,7 @@ const ROLES = [
 
 type RoleValue = typeof ROLES[number]["value"];
 
-export function NewStaffModal({ open, onClose }: Props) {
+export function NewStaffModal({ open, onClose, doctorMode = false }: Props) {
     const { refresh } = useStaff();
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -29,11 +34,14 @@ export function NewStaffModal({ open, onClose }: Props) {
 
     const [form, setForm] = useState({
         full_name: "", email: "", phone: "",
-        role: "doctor" as RoleValue, password: "",
+        role: (doctorMode ? "doctor" : "doctor") as RoleValue,
+        password: "",
+        specialty: "",
+        bio: "",
     });
 
     const set = (k: keyof typeof form) =>
-        (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
             setForm(prev => ({ ...prev, [k]: e.target.value }));
             setErrors(prev => { const n = { ...prev }; delete n[k]; return n; });
         };
@@ -56,18 +64,37 @@ export function NewStaffModal({ open, onClose }: Props) {
         if (!validate()) return;
         setLoading(true); setApiError(null);
         try {
-            await staffApi.create({
+            const staff = await staffApi.create({
                 full_name: form.full_name.trim(),
                 email: form.email.trim(),
                 role: form.role,
                 password: form.password,
                 ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
             } as Parameters<typeof staffApi.create>[0]);
+
+            // If doctor role + specialty/bio filled in, fetch doctor record and update it
+            if (form.role === "doctor" && (form.specialty.trim() || form.bio.trim())) {
+                try {
+                    // The backend creates the doctor row linked to this staff id.
+                    // We need to find that doctor by staff_id to get the doctor id.
+                    const doctors = await doctorsApi.list();
+                    const doc = doctors.find(d => d.staff_id === staff.id);
+                    if (doc) {
+                        await doctorsApi.update(doc.id, {
+                            ...(form.specialty.trim() ? { specialty: form.specialty.trim() } : {}),
+                            ...(form.bio.trim() ? { bio: form.bio.trim() } : {}),
+                        });
+                    }
+                } catch {
+                    // Non-fatal — doctor was created, specialty update failed silently
+                }
+            }
+
             await refresh();
             setSuccess(true);
             setTimeout(() => {
                 setSuccess(false);
-                setForm({ full_name: "", email: "", phone: "", role: "doctor", password: "" });
+                setForm({ full_name: "", email: "", phone: "", role: doctorMode ? "doctor" : "doctor", password: "", specialty: "", bio: "" });
                 onClose();
             }, 1200);
         } catch (err: unknown) {
@@ -80,6 +107,8 @@ export function NewStaffModal({ open, onClose }: Props) {
         onClose();
     }
 
+    const isDoctor = doctorMode || form.role === "doctor";
+
     if (!open) return null;
 
     return (
@@ -88,12 +117,17 @@ export function NewStaffModal({ open, onClose }: Props) {
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                 <div className="flex items-center justify-between px-6 py-5 border-b border-border/60">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
-                            <ShieldCheck className="w-4 h-4 text-violet-600" />
+                        <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center",
+                            doctorMode ? "bg-blue-50" : "bg-violet-50")}>
+                            {doctorMode
+                                ? <Stethoscope className="w-4 h-4 text-blue-600" />
+                                : <ShieldCheck className="w-4 h-4 text-violet-600" />}
                         </div>
                         <div>
-                            <h2 className="font-bold text-base">Add Staff Member</h2>
-                            <p className="text-xs text-muted-foreground">Create a new clinic account</p>
+                            <h2 className="font-bold text-base">{doctorMode ? "Add Doctor" : "Add Staff Member"}</h2>
+                            <p className="text-xs text-muted-foreground">
+                                {doctorMode ? "Create a new doctor account" : "Create a new clinic account"}
+                            </p>
                         </div>
                     </div>
                     <button onClick={reset} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
@@ -110,19 +144,19 @@ export function NewStaffModal({ open, onClose }: Props) {
                         )}
                         {success && (
                             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 text-sm text-emerald-700">
-                                <CheckCircle2 className="w-4 h-4 shrink-0" />Staff member added!
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />{doctorMode ? "Doctor added!" : "Staff member added!"}
                             </div>
                         )}
 
                         <Field label="Full Name" required error={errors.full_name}>
                             <Input className={cn("rounded-xl", errors.full_name && "border-red-400")}
-                                placeholder="Dr. Full Name" value={form.full_name} onChange={set("full_name")} />
+                                placeholder={doctorMode ? "Dr. Full Name" : "Full Name"} value={form.full_name} onChange={set("full_name")} />
                         </Field>
 
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Email" required error={errors.email}>
                                 <Input type="email" className={cn("rounded-xl", errors.email && "border-red-400")}
-                                    placeholder="staff@clinic.com" value={form.email} onChange={set("email")} />
+                                    placeholder="doctor@clinic.com" value={form.email} onChange={set("email")} />
                             </Field>
                             <Field label="Phone" error={errors.phone}>
                                 <Input className={cn("rounded-xl", errors.phone && "border-red-400")}
@@ -130,13 +164,35 @@ export function NewStaffModal({ open, onClose }: Props) {
                             </Field>
                         </div>
 
-                        <Field label="Role" required error={errors.role}>
-                            <select value={form.role} onChange={set("role")}
-                                className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                    errors.role && "border-red-400")}>
-                                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                            </select>
-                        </Field>
+                        {!doctorMode && (
+                            <Field label="Role" required error={errors.role}>
+                                <select value={form.role} onChange={set("role")}
+                                    className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
+                                        errors.role && "border-red-400")}>
+                                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                </select>
+                            </Field>
+                        )}
+
+                        {isDoctor && (
+                            <Field label="Specialty" error={errors.specialty}>
+                                <Input className="rounded-xl"
+                                    placeholder="e.g. Physiotherapy, Sports Rehab…"
+                                    value={form.specialty} onChange={set("specialty")} />
+                            </Field>
+                        )}
+
+                        {isDoctor && (
+                            <Field label="Bio" error={errors.bio}>
+                                <textarea
+                                    rows={2}
+                                    className="w-full rounded-xl border border-input bg-background text-sm px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                                    placeholder="Short description (optional)"
+                                    value={form.bio}
+                                    onChange={set("bio")}
+                                />
+                            </Field>
+                        )}
 
                         <Field label="Temporary Password" required error={errors.password}>
                             <div className="relative">
@@ -155,7 +211,8 @@ export function NewStaffModal({ open, onClose }: Props) {
                         <Button type="button" variant="outline" onClick={reset} className="rounded-xl">Cancel</Button>
                         <Button type="submit" disabled={loading || success} className="rounded-xl gap-2 min-w-[120px]">
                             {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Adding…</> :
-                                success ? <><CheckCircle2 className="w-4 h-4" />Added!</> : "Add Staff"}
+                                success ? <><CheckCircle2 className="w-4 h-4" />Added!</> :
+                                    doctorMode ? "Add Doctor" : "Add Staff"}
                         </Button>
                     </div>
                 </form>

@@ -10,6 +10,7 @@ import { useStaff } from "@/lib/contexts/staff-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import type { Doctor } from "@/lib/api";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
+import { NewStaffModal } from "@/components/modals/new-staff-modal";
 
 const AVATAR_COLORS = [
     "bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700",
@@ -39,6 +40,7 @@ export default function DoctorsPage() {
     const [selected, setSelected] = useState<Doctor | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>("profile");
     const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [addDoctorOpen, setAddDoctorOpen] = useState(false);
 
     const now = new Date();
     const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -242,7 +244,7 @@ export default function DoctorsPage() {
                     <button onClick={refresh} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
                         <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
                     </button>
-                    <Button size="sm" className="gap-1.5 rounded-xl shrink-0">
+                    <Button size="sm" className="gap-1.5 rounded-xl shrink-0" onClick={() => setAddDoctorOpen(true)}>
                         <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Doctor</span>
                     </Button>
                 </div>
@@ -333,6 +335,9 @@ export default function DoctorsPage() {
             {/* Schedule session modal */}
             <NewSessionModal open={scheduleOpen} onClose={() => setScheduleOpen(false)}
                 prefill={selected ? { doctorId: selected.id } : undefined} />
+
+            {/* Add doctor modal */}
+            <NewStaffModal open={addDoctorOpen} onClose={() => { setAddDoctorOpen(false); refresh(); }} doctorMode />
         </div>
     );
 }

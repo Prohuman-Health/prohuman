@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
 import {
     Plus, Search, Pencil, Eye, Copy, Trash2, GripVertical, X,
     FileText, Loader2, RefreshCw, AlertCircle, CheckCircle2,
-    Type, ToggleLeft, Hash, List, Scale,
+    Type, ToggleLeft, List, Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,62 @@ const ANSWER_TYPES = Object.keys(ANSWER_TYPE_META) as QuestionAnswerType[];
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function Skeleton({ className }: { className?: string }) {
     return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
+
+// ── Option Chips Input ─────────────────────────────────────────────────────────
+function OptionChipsInput({
+    chips, onChange, hasError,
+}: { chips: string[]; onChange: (v: string[]) => void; hasError?: boolean }) {
+    const [draft, setDraft] = useState("");
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    function commit(raw: string) {
+        const val = raw.trim();
+        if (val && !chips.includes(val)) onChange([...chips, val]);
+        setDraft("");
+    }
+
+    function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+        if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            commit(draft);
+        } else if (e.key === "Backspace" && draft === "" && chips.length > 0) {
+            onChange(chips.slice(0, -1));
+        }
+    }
+
+    function remove(i: number) {
+        onChange(chips.filter((_, idx) => idx !== i));
+    }
+
+    return (
+        <div
+            className={cn(
+                "flex flex-wrap gap-1.5 border rounded-xl px-2.5 py-2 bg-white cursor-text min-h-[36px] transition-colors",
+                hasError ? "border-red-400" : "border-border hover:border-foreground/40 focus-within:border-foreground",
+            )}
+            onClick={() => inputRef.current?.focus()}
+        >
+            {chips.map((c, i) => (
+                <span key={i} className="flex items-center gap-1 bg-muted border border-border rounded-lg px-2 py-0.5 text-xs font-medium text-foreground">
+                    {c}
+                    <button type="button" onClick={() => remove(i)}
+                        className="text-muted-foreground hover:text-red-500 transition-colors ml-0.5">
+                        <X className="w-2.5 h-2.5" />
+                    </button>
+                </span>
+            ))}
+            <input
+                ref={inputRef}
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={onKeyDown}
+                onBlur={() => commit(draft)}
+                placeholder={chips.length === 0 ? "Type an option, press Enter or comma to add…" : "Add another…"}
+                className="flex-1 min-w-[120px] outline-none bg-transparent text-xs text-foreground placeholder:text-muted-foreground"
+            />
+        </div>
+    );
 }
 
 // ── Form Preview Modal ─────────────────────────────────────────────────────────
@@ -113,7 +169,7 @@ interface BuilderQ {
     question_id: string;  // "" = new
     text: string;
     answer_type: QuestionAnswerType;
-    options: string;      // comma-sep string for editing
+    options: string[];    // list of option chips
     scale_min: string;
     scale_max: string;
     is_required: boolean;
@@ -124,8 +180,7 @@ function validateQ(q: BuilderQ): Record<string, string> {
     const e: Record<string, string> = {};
     if (!q.text.trim()) e.text = "Question text is required";
     if (q.answer_type === "multiple_choice") {
-        const opts = q.options.split(",").map(s => s.trim()).filter(Boolean);
-        if (opts.length < 2) e.options = "At least 2 options required (comma-separated)";
+        if (q.options.length < 2) e.options = "At least 2 options required";
     }
     if (q.answer_type === "scale") {
         const min = parseInt(q.scale_min), max = parseInt(q.scale_max);
@@ -153,7 +208,7 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
             setQuestions((f.questions ?? []).map(q => ({
                 _key: q.id, question_id: q.id, text: q.text,
                 answer_type: q.answer_type,
-                options: (q.options ?? []).join(", "),
+                options: q.options ?? [],
                 scale_min: String(q.scale_min ?? "0"),
                 scale_max: String(q.scale_max ?? "10"),
                 is_required: q.is_required,
@@ -165,7 +220,7 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
     function addQuestion(type: QuestionAnswerType) {
         setQuestions(prev => [...prev, {
             _key: `new-${Date.now()}`, question_id: "", text: "",
-            answer_type: type, options: "", scale_min: "0", scale_max: "10",
+            answer_type: type, options: [], scale_min: "0", scale_max: "10",
             is_required: true, errors: {},
         }]);
     }
@@ -214,7 +269,7 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
                 if (!q.text.trim()) continue;
 
                 const opts = q.answer_type === "multiple_choice"
-                    ? q.options.split(",").map(s => s.trim()).filter(Boolean)
+                    ? q.options.filter(Boolean)
                     : undefined;
 
                 const payload: Record<string, unknown> = {
@@ -336,15 +391,14 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
                                                 {/* Multiple choice options */}
                                                 {q.answer_type === "multiple_choice" && (
                                                     <div className="space-y-1">
-                                                        <input
-                                                            className={cn("w-full text-xs bg-transparent outline-none border-b transition-colors",
-                                                                q.errors.options ? "border-red-400 text-red-600 placeholder:text-red-400" : "border-transparent hover:border-border focus:border-border text-muted-foreground")}
-                                                            value={q.options}
-                                                            onChange={e => updateQ(q._key, { options: e.target.value })}
-                                                            placeholder="Enter options separated by commas (min 2), e.g. Yes, No, Sometimes" />
+                                                        <OptionChipsInput
+                                                            chips={q.options}
+                                                            onChange={chips => updateQ(q._key, { options: chips })}
+                                                            hasError={!!q.errors.options}
+                                                        />
                                                         {q.errors.options
                                                             ? <p className="text-[11px] text-red-500">{q.errors.options}</p>
-                                                            : <p className="text-[10px] text-muted-foreground">Separate options with commas — minimum 2 required</p>}
+                                                            : <p className="text-[10px] text-muted-foreground">{q.options.length} option{q.options.length !== 1 ? "s" : ""} · minimum 2 required</p>}
                                                     </div>
                                                 )}
 

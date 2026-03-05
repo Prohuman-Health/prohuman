@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
@@ -48,13 +49,15 @@ export default function Sidebar({ onClose }: SidebarProps) {
     return (
         <aside className="w-[220px] shrink-0 h-full bg-white rounded-2xl shadow-sm flex flex-col overflow-hidden">
             {/* Logo */}
-            <div className="flex items-center justify-between px-5 pt-6 pb-5">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shrink-0">
-                        <Activity className="w-4 h-4 text-white" />
-                    </div>
-                    <span className="font-bold text-[17px] tracking-tight">ProHuman</span>
-                </div>
+            <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                <Image
+                    src="/logo.png"
+                    alt="ProHuman"
+                    width={140}
+                    height={36}
+                    className="h-9 w-auto object-contain"
+                    priority
+                />
                 {onClose && (
                     <button
                         onClick={onClose}
