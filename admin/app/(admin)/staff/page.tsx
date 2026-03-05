@@ -1,99 +1,130 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, RefreshCw, UserCheck, UserX, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useStaff } from "@/lib/contexts/staff-context";
+import { useState } from "react";
+import { NewStaffModal } from "@/components/modals/new-staff-modal";
 
-const STAFF = [
-    { id: "st1", name: "Sara Rodrigues", role: "Receptionist", email: "sara.r@prohuman.in", phone: "+91 98765 11111", status: "active", lastLogin: "Today, 9:02 AM", initials: "SR" },
-    { id: "st2", name: "Riya Patel", role: "Front Desk", email: "riya.p@prohuman.in", phone: "+91 87654 22222", status: "active", lastLogin: "Today, 8:45 AM", initials: "RP" },
-    { id: "st3", name: "Amit Kulkarni", role: "Admin", email: "amit.k@prohuman.in", phone: "+91 76543 33333", status: "active", lastLogin: "Yesterday", initials: "AK" },
-    { id: "st4", name: "Neha Gupta", role: "Receptionist", email: "neha.g@prohuman.in", phone: "+91 65432 44444", status: "inactive", lastLogin: "1 week ago", initials: "NG" },
-];
-
-const ROLE_CONFIG: Record<string, string> = {
-    Admin: "bg-violet-100 text-violet-700",
-    Receptionist: "bg-blue-100 text-blue-700",
-    "Front Desk": "bg-amber-100 text-amber-700",
+const ROLE_COLORS: Record<string, string> = {
+    admin: "bg-violet-100 text-violet-700",
+    receptionist: "bg-blue-100 text-blue-700",
+    physiotherapist: "bg-emerald-100 text-emerald-700",
+    massager: "bg-amber-100 text-amber-700",
+    fitness_trainer: "bg-orange-100 text-orange-700",
+    doctor: "bg-teal-100 text-teal-700",
 };
+const AVATAR_COLORS = ["bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700", "bg-emerald-100 text-emerald-700", "bg-amber-100 text-amber-700", "bg-teal-100 text-teal-700", "bg-orange-100 text-orange-700"];
+const initials = (name: string) => name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
-const AVATAR_COLORS = ["bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700", "bg-emerald-100 text-emerald-700", "bg-amber-100 text-amber-700"];
+function Skeleton({ className }: { className?: string }) {
+    return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
 
 export default function StaffPage() {
+    const { staff, loading, showInactive, setShowInactive, refresh } = useStaff();
     const [search, setSearch] = useState("");
-    const filtered = STAFF.filter(
-        (s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.role.toLowerCase().includes(search.toLowerCase())
+    const [addStaffOpen, setAddStaffOpen] = useState(false);
+
+    const filtered = staff.filter(s =>
+        !search || s.full_name.toLowerCase().includes(search.toLowerCase()) ||
+        s.email.toLowerCase().includes(search.toLowerCase()) ||
+        s.role.toLowerCase().includes(search.toLowerCase())
     );
 
     return (
-        <div className="flex flex-col gap-4 p-5">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Staff & Roles</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">Manage staff accounts and their access levels.</p>
+        <>
+            <div className="flex flex-col gap-4 p-5">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Staff &amp; Roles</h1>
+                        <p className="text-sm text-muted-foreground mt-0.5">{staff.length} {showInactive ? "inactive" : "active"} staff members</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={refresh} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                        </button>
+                        <Button size="sm" className="gap-1.5 rounded-xl" onClick={() => setAddStaffOpen(true)}><Plus className="w-4 h-4" /> Add Staff</Button>
+                    </div>
                 </div>
-                <Button size="sm" className="gap-1.5 rounded-xl">
-                    <Plus className="w-4 h-4" /> Add Staff
-                </Button>
-            </div>
 
-            {/* Search */}
-            <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input placeholder="Search staff..." className="pl-9 rounded-xl bg-white" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-
-            {/* Table */}
-            <div className="bg-white rounded-2xl overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="border-b border-border/60">
-                        <tr>
-                            {["Name", "Role", "Email", "Phone", "Last Login", "Status", "Actions"].map((h) => (
-                                <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filtered.map((s, i) => (
-                            <tr key={s.id} className="border-b border-border/60 hover:bg-muted/30 transition-colors">
-                                <td className="px-5 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0", AVATAR_COLORS[i % AVATAR_COLORS.length])}>
-                                            {s.initials}
-                                        </div>
-                                        <span className="font-semibold">{s.name}</span>
-                                    </div>
-                                </td>
-                                <td className="px-5 py-4">
-                                    <span className={cn("text-[11px] font-medium px-2.5 py-1 rounded-full", ROLE_CONFIG[s.role] ?? "bg-muted text-muted-foreground")}>
-                                        {s.role}
-                                    </span>
-                                </td>
-                                <td className="px-5 py-4 text-muted-foreground">{s.email}</td>
-                                <td className="px-5 py-4 text-muted-foreground">{s.phone}</td>
-                                <td className="px-5 py-4 text-muted-foreground text-xs">{s.lastLogin}</td>
-                                <td className="px-5 py-4">
-                                    <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium capitalize",
-                                        s.status === "active" ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground"
-                                    )}>
-                                        {s.status}
-                                    </Badge>
-                                </td>
-                                <td className="px-5 py-4">
-                                    <div className="flex items-center gap-1">
-                                        <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"><Pencil className="w-3.5 h-3.5" /></button>
-                                        <button className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>
-                                    </div>
-                                </td>
-                            </tr>
+                <div className="flex items-center gap-3">
+                    <div className="relative w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input placeholder="Search staff…" className="pl-9 rounded-xl bg-white" value={search} onChange={e => setSearch(e.target.value)} />
+                    </div>
+                    <div className="flex items-center gap-1 bg-white rounded-xl p-1">
+                        {[[false, "Active"], [true, "Inactive"]].map(([v, l]) => (
+                            <button key={String(v)} onClick={() => setShowInactive(v as boolean)}
+                                className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all", showInactive === v ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
+                                {l}
+                            </button>
                         ))}
-                    </tbody>
-                </table>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl overflow-hidden border border-border/50">
+                    <table className="w-full text-sm">
+                        <thead className="border-b border-border/60">
+                            <tr>
+                                {["Name", "Role", "Email", "Phone", "Joined", "Status", "Actions"].map(h => (
+                                    <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i} className="border-b border-border/60">
+                                        {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton className="h-4 w-full" /></td>)}
+                                    </tr>
+                                ))
+                            ) : filtered.length === 0 ? (
+                                <tr><td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
+                                    {search ? "No staff match your search" : `No ${showInactive ? "inactive" : "active"} staff`}
+                                </td></tr>
+                            ) : filtered.map((s, i) => (
+                                <tr key={s.id} className="border-b border-border/60 hover:bg-muted/30 transition-colors">
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0", AVATAR_COLORS[i % AVATAR_COLORS.length])}>
+                                                {initials(s.full_name)}
+                                            </div>
+                                            <span className="font-semibold">{s.full_name}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-5 py-4">
+                                        <span className={cn("text-[11px] font-medium px-2.5 py-1 rounded-full capitalize", ROLE_COLORS[s.role] ?? "bg-muted text-muted-foreground")}>
+                                            {s.role.replace("_", " ")}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-4 text-muted-foreground text-xs">{s.email}</td>
+                                    <td className="px-5 py-4 text-muted-foreground text-xs">{s.phone ?? "—"}</td>
+                                    <td className="px-5 py-4 text-muted-foreground text-xs">{new Date(s.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                                    <td className="px-5 py-4">
+                                        <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium",
+                                            s.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
+                                            {s.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                    </td>
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-1">
+                                            <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"><Pencil className="w-3.5 h-3.5" /></button>
+                                            <button className={cn("p-1.5 transition-colors rounded-lg", s.is_active ? "text-muted-foreground hover:text-red-500 hover:bg-red-50" : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50")}>
+                                                {s.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+            <NewStaffModal open={addStaffOpen} onClose={() => setAddStaffOpen(false)} />
+        </>
     );
 }

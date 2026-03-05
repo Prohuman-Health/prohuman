@@ -1,105 +1,467 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+    Search, RefreshCw, CalendarDays, X, Loader2, FileText,
+    CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
+    ClipboardList,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useSessions } from "@/lib/contexts/sessions-context";
+import { NewSessionModal } from "@/components/modals/new-session-modal";
+import {
+    sessionsApi, Session,
+    SessionFormData, SessionFormAnswer,
+} from "@/lib/api";
 
-const SESSIONS = [
-    { id: "s1", patient: "Aisha Mehta", doctor: "Dr. Priya Sharma", type: "Initial Evaluation", date: "Feb 18, 2025", time: "09:00", status: "completed" },
-    { id: "s2", patient: "Rohan Kapoor", doctor: "Dr. Arjun Nair", type: "Follow-Up Session", date: "Feb 18, 2025", time: "10:00", status: "completed" },
-    { id: "s3", patient: "Sunita Rao", doctor: "Dr. Priya Sharma", type: "Follow-Up Session", date: "Feb 18, 2025", time: "11:00", status: "confirmed" },
-    { id: "s4", patient: "Vikram Singh", doctor: "Dr. Arjun Nair", type: "Discharge Assessment", date: "Feb 18, 2025", time: "13:00", status: "confirmed" },
-    { id: "s5", patient: "Meena Joshi", doctor: "Dr. Priya Sharma", type: "Initial Evaluation", date: "Feb 19, 2025", time: "14:00", status: "confirmed" },
-    { id: "s6", patient: "Deepak Verma", doctor: "Dr. Arjun Nair", type: "Follow-Up Session", date: "Feb 20, 2025", time: "09:30", status: "pending" },
-    { id: "s7", patient: "Kavya Reddy", doctor: "Dr. Priya Sharma", type: "Group Therapy", date: "Feb 17, 2025", time: "15:00", status: "no-show" },
-];
-
+// ── Status config ──────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
     completed: { label: "Completed", cls: "border-emerald-200 text-emerald-700 bg-emerald-50" },
     confirmed: { label: "Confirmed", cls: "border-blue-200 text-blue-700 bg-blue-50" },
     pending: { label: "Pending", cls: "border-amber-200 text-amber-700 bg-amber-50" },
     "no-show": { label: "No-Show", cls: "border-red-200 text-red-600 bg-red-50" },
+    cancelled: { label: "Cancelled", cls: "border-muted-foreground/30 text-muted-foreground bg-muted/30" },
+    "late-cancellation": { label: "Late Cancel", cls: "border-orange-200 text-orange-600 bg-orange-50" },
+    rescheduled: { label: "Rescheduled", cls: "border-purple-200 text-purple-600 bg-purple-50" },
 };
+const FILTERS = ["all", "pending", "confirmed", "completed", "no-show", "cancelled"];
 
-const FILTERS = ["All", "Confirmed", "Completed", "Pending", "No-Show"];
+function Skeleton({ className }: { className?: string }) {
+    return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
 
-export default function SessionsPage() {
-    const [search, setSearch] = useState("");
-    const [filter, setFilter] = useState("All");
+// ── Session Form Modal ─────────────────────────────────────────────────────────
+function SessionFormModal({ sessionId, sessionTitle, onClose }: {
+    sessionId: string; sessionTitle: string; onClose: () => void;
+}) {
+    const [data, setData] = useState<SessionFormData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    // Answers keyed by question_id
+    const [answers, setAnswers] = useState<Record<string, SessionFormAnswer>>({});
 
-    const filtered = SESSIONS.filter((s) => {
-        const matchSearch = s.patient.toLowerCase().includes(search.toLowerCase()) || s.doctor.toLowerCase().includes(search.toLowerCase());
-        const matchFilter = filter === "All" || s.status === filter.toLowerCase().replace(" ", "-");
-        return matchSearch && matchFilter;
-    });
+    useEffect(() => {
+        sessionsApi.getForm(sessionId)
+            .then(d => {
+                setData(d);
+                // Pre-fill existing responses
+                const pre: Record<string, SessionFormAnswer> = {};
+                for (const r of d.responses) {
+                    pre[r.question_id] = {
+                        question_id: r.question_id,
+                        ...(r.answer_text != null ? { answer_text: r.answer_text } : {}),
+                        ...(r.answer_value != null ? { answer_value: r.answer_value } : {}),
+                        ...(r.answer_options != null ? { answer_options: r.answer_options } : {}),
+                    };
+                }
+                setAnswers(pre);
+            })
+            .catch(() => setError("Failed to load form"))
+            .finally(() => setLoading(false));
+    }, [sessionId]);
+
+    const hasExisting = (data?.responses?.length ?? 0) > 0;
+
+    async function submit() {
+        if (!data?.questions?.length) return;
+        setSaving(true); setError(null);
+        try {
+            const payload = Object.values(answers).filter(a => a.question_id);
+            if (hasExisting) {
+                await sessionsApi.updateForm(sessionId, payload);
+            } else {
+                await sessionsApi.submitForm(sessionId, payload);
+            }
+            setSaved(true);
+            setTimeout(() => { setSaved(false); onClose(); }, 1200);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to save");
+        } finally { setSaving(false); }
+    }
+
+    function setAnswer(qid: string, patch: Partial<SessionFormAnswer>) {
+        setAnswers(prev => ({ ...prev, [qid]: { ...prev[qid], question_id: qid, ...patch } }));
+    }
 
     return (
-        <div className="flex flex-col h-full gap-4 p-4 md:p-5">
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">Sessions</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5 hidden sm:block">Track all clinic sessions and their statuses.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                            <ClipboardList className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-base">Session Form</h2>
+                            <p className="text-xs text-muted-foreground truncate max-w-[280px]">{sessionTitle}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
-                <button className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-xl text-xs text-muted-foreground hover:bg-white transition-colors bg-white shrink-0">
-                    <Filter className="w-3.5 h-3.5" /> Filter
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                    {loading ? (
+                        Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)
+                    ) : error ? (
+                        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+                            <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                        </div>
+                    ) : !data?.form_id ? (
+                        <div className="flex flex-col items-center gap-3 py-12 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+                                <FileText className="w-6 h-6 text-muted-foreground" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-sm">No form linked</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    This session type has no form attached.<br />
+                                    Go to <strong>Session Types</strong> and link a published form.
+                                </p>
+                            </div>
+                        </div>
+                    ) : data.questions.length === 0 ? (
+                        <p className="text-center py-8 text-sm text-muted-foreground">The linked form has no questions yet.</p>
+                    ) : (
+                        <>
+                            {hasExisting && (
+                                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs text-blue-700">
+                                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                    Responses already submitted. You can update them below.
+                                </div>
+                            )}
+                            {saved && (
+                                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 text-xs text-emerald-700">
+                                    <CheckCircle2 className="w-4 h-4 shrink-0" />Saved successfully!
+                                </div>
+                            )}
+                            {error && (
+                                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-xs text-red-700">
+                                    <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                                </div>
+                            )}
+                            {data.questions.map((q, i) => {
+                                const ans = answers[q.id] ?? { question_id: q.id };
+                                return (
+                                    <div key={q.id} className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                                            {i + 1}. {q.text}
+                                            {q.is_required && <span className="text-red-500">*</span>}
+                                        </label>
+
+                                        {/* free_text */}
+                                        {q.answer_type === "free_text" && (
+                                            <textarea rows={2} value={ans.answer_text ?? ""}
+                                                onChange={e => setAnswer(q.id, { answer_text: e.target.value })}
+                                                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                                                placeholder="Type your answer…" />
+                                        )}
+
+                                        {/* yes_no */}
+                                        {q.answer_type === "yes_no" && (
+                                            <div className="flex items-center gap-3">
+                                                {["Yes", "No"].map(opt => (
+                                                    <button key={opt} type="button"
+                                                        onClick={() => setAnswer(q.id, { answer_text: opt })}
+                                                        className={cn("px-5 py-2 rounded-xl border text-sm font-medium transition-all",
+                                                            ans.answer_text === opt
+                                                                ? "bg-foreground text-white border-foreground"
+                                                                : "bg-background text-muted-foreground border-input hover:border-foreground/40")}>
+                                                        {opt}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* scale */}
+                                        {q.answer_type === "scale" && (
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-1 flex-wrap">
+                                                    {Array.from({ length: (q.scale_max ?? 10) - (q.scale_min ?? 0) + 1 }).map((_, n) => {
+                                                        const val = (q.scale_min ?? 0) + n;
+                                                        return (
+                                                            <button key={n} type="button"
+                                                                onClick={() => setAnswer(q.id, { answer_value: val })}
+                                                                className={cn("w-9 h-9 rounded-xl border text-sm font-medium transition-all",
+                                                                    ans.answer_value === val
+                                                                        ? "bg-foreground text-white border-foreground"
+                                                                        : "bg-background text-muted-foreground border-input hover:border-foreground/40")}>
+                                                                {val}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
+                                                    <span>{q.scale_min ?? 0} — Low</span>
+                                                    <span>High — {q.scale_max ?? 10}</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* multiple_choice */}
+                                        {q.answer_type === "multiple_choice" && q.options && (
+                                            <div className="space-y-1.5">
+                                                {q.options.map(opt => {
+                                                    const selected = (ans.answer_options ?? []).includes(opt);
+                                                    return (
+                                                        <button key={opt} type="button"
+                                                            onClick={() => {
+                                                                const cur = ans.answer_options ?? [];
+                                                                setAnswer(q.id, {
+                                                                    answer_options: selected
+                                                                        ? cur.filter(o => o !== opt)
+                                                                        : [...cur, opt],
+                                                                });
+                                                            }}
+                                                            className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-sm text-left transition-all",
+                                                                selected
+                                                                    ? "bg-foreground/5 border-foreground/30 font-medium"
+                                                                    : "bg-background border-input text-muted-foreground hover:border-foreground/30")}>
+                                                            <div className={cn("w-4 h-4 rounded border shrink-0 flex items-center justify-center",
+                                                                selected ? "bg-foreground border-foreground" : "border-input")}>
+                                                                {selected && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
+                                                            </div>
+                                                            {opt}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </>
+                    )}
+                </div>
+
+                {/* Footer */}
+                {data?.form_id && data.questions.length > 0 && (
+                    <div className="px-6 py-4 border-t border-border/60 flex justify-end gap-3">
+                        <Button variant="outline" className="rounded-xl" onClick={onClose} disabled={saving}>Close</Button>
+                        <Button className="rounded-xl gap-2" onClick={submit} disabled={saving || saved}>
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                                saved ? <CheckCircle2 className="w-4 h-4" /> : null}
+                            {hasExisting ? "Update Responses" : "Submit Form"}
+                        </Button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Session Detail Panel ───────────────────────────────────────────────────────
+function SessionDetail({ session, onClose, onFormOpen }: {
+    session: Session; onClose: () => void; onFormOpen: () => void;
+}) {
+    const cfg = STATUS_CONFIG[session.status] ?? STATUS_CONFIG.pending;
+    const dt = new Date(session.scheduled_at);
+
+    return (
+        <div className="w-[280px] shrink-0 bg-white rounded-2xl border border-border/50 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+                <h2 className="font-semibold text-sm">Session Details</h2>
+                <button onClick={onClose} className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground">
+                    <X className="w-3 h-3" />
                 </button>
             </div>
 
-            {/* Search + filters — wrap on mobile */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input placeholder="Search sessions..." className="pl-9 rounded-xl bg-white" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+                {/* Status */}
+                <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium", cfg.cls)}>
+                    {cfg.label}
+                </Badge>
+
+                {/* Date/time */}
+                <div className="bg-muted/50 rounded-xl p-3 space-y-1">
+                    <p className="font-semibold text-sm">{dt.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "long", year: "numeric" })}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })} · {session.duration_minutes} min</p>
                 </div>
-                <div className="flex items-center gap-1 bg-white rounded-xl p-1 overflow-x-auto shrink-0">
-                    {FILTERS.map((f) => (
-                        <button key={f} onClick={() => setFilter(f)} className={cn("px-2.5 md:px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap", filter === f ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
-                            {f}
-                        </button>
-                    ))}
-                </div>
-                <span className="text-xs text-muted-foreground sm:ml-auto">{filtered.length} sessions</span>
+
+                {/* Info rows */}
+                {[
+                    { icon: User, label: "Patient", val: `${session.patient_name} (${session.patient_code})` },
+                    { icon: Stethoscope, label: "Doctor", val: `Dr. ${session.doctor_name}` },
+                    { icon: FileText, label: "Session Type", val: session.session_type_name },
+                    { icon: Clock, label: "Duration", val: `${session.duration_minutes} min` },
+                ].map(({ icon: Icon, label, val }) => (
+                    <div key={label} className="flex items-start gap-2.5">
+                        <Icon className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+                            <p className="text-xs font-medium truncate">{val}</p>
+                        </div>
+                    </div>
+                ))}
+
+                {session.pre_session_notes && (
+                    <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Notes</p>
+                        <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3 leading-relaxed">{session.pre_session_notes}</p>
+                    </div>
+                )}
             </div>
 
-            {/* Scrollable table */}
-            <div className="bg-white rounded-2xl overflow-hidden flex-1">
-                <div className="overflow-x-auto h-full">
-                    <table className="w-full text-sm min-w-[640px]">
-                        <thead className="border-b border-border/60 sticky top-0 bg-white z-10">
-                            <tr>
-                                {["Patient", "Doctor", "Session Type", "Date", "Time", "Status", "Actions"].map((h) => (
-                                    <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 md:px-5 py-3.5">{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map((s) => {
-                                const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.completed;
-                                return (
-                                    <tr key={s.id} className="border-b border-border/60 hover:bg-muted/30 transition-colors cursor-pointer">
-                                        <td className="px-4 md:px-5 py-3.5 font-medium whitespace-nowrap">{s.patient}</td>
-                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.doctor}</td>
-                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.type}</td>
-                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.date}</td>
-                                        <td className="px-4 md:px-5 py-3.5 text-muted-foreground font-mono">{s.time}</td>
-                                        <td className="px-4 md:px-5 py-3.5">
-                                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium whitespace-nowrap", cfg.cls)}>{cfg.label}</Badge>
-                                        </td>
-                                        <td className="px-4 md:px-5 py-3.5">
-                                            <div className="flex items-center gap-3">
-                                                <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">View</button>
-                                                <button className="text-xs text-red-500 hover:text-red-700 transition-colors">Cancel</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+            <div className="p-4 border-t border-border/60 space-y-2">
+                <Button size="sm" className="w-full rounded-xl gap-2" onClick={onFormOpen}>
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    {session.status === "completed" ? "View Form Responses" : "Fill Session Form"}
+                </Button>
             </div>
+        </div>
+    );
+}
+
+// ── Main Sessions Page ─────────────────────────────────────────────────────────
+export default function SessionsPage() {
+    const { sessions, total, loading, filter, page, setFilter, setPage, refresh } = useSessions();
+    const [search, setSearch] = useState("");
+    const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [selected, setSelected] = useState<Session | null>(null);
+    const [formSession, setFormSession] = useState<Session | null>(null);
+    const LIMIT = 25;
+
+    const filtered = sessions.filter(s =>
+        !search ||
+        s.patient_name.toLowerCase().includes(search.toLowerCase()) ||
+        s.doctor_name.toLowerCase().includes(search.toLowerCase()) ||
+        s.session_type_name.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="flex h-full gap-4 p-5 overflow-hidden">
+            {/* Main column */}
+            <div className="flex flex-col flex-1 min-w-0 gap-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Sessions</h1>
+                        <p className="text-sm text-muted-foreground mt-0.5">{total} total sessions</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={refresh} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                        </button>
+                        <button onClick={() => setScheduleOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-foreground text-white rounded-xl text-xs font-medium hover:bg-foreground/90 transition-colors">
+                            <CalendarDays className="w-3.5 h-3.5" /> Schedule
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input placeholder="Search patient, doctor, type…" className="pl-9 rounded-xl bg-white" value={search} onChange={e => setSearch(e.target.value)} />
+                    </div>
+                    <div className="flex items-center gap-1 bg-white rounded-xl p-1 overflow-x-auto">
+                        {FILTERS.map(f => (
+                            <button key={f} onClick={() => setFilter(f)}
+                                className={cn("px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap capitalize",
+                                    filter === f ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
+                                {f === "all" ? "All" : (STATUS_CONFIG[f]?.label ?? f)}
+                            </button>
+                        ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground sm:ml-auto">{filtered.length} shown</span>
+                </div>
+
+                <div className="bg-white rounded-2xl overflow-hidden flex-1 border border-border/50">
+                    <div className="overflow-x-auto h-full">
+                        <table className="w-full text-sm min-w-[700px]">
+                            <thead className="border-b border-border/60 sticky top-0 bg-white z-10">
+                                <tr>
+                                    {["Patient", "Doctor", "Session Type", "Date & Time", "Duration", "Status", "Form"].map(h => (
+                                        <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    Array.from({ length: 8 }).map((_, i) => (
+                                        <tr key={i} className="border-b border-border/60">
+                                            {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-5 py-3.5"><Skeleton className="h-4 w-full" /></td>)}
+                                        </tr>
+                                    ))
+                                ) : filtered.length === 0 ? (
+                                    <tr><td colSpan={7} className="text-center py-16 text-muted-foreground text-sm">
+                                        {search ? "No sessions match your search" : "No sessions found"}
+                                    </td></tr>
+                                ) : filtered.map(s => {
+                                    const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
+                                    const dt = new Date(s.scheduled_at);
+                                    const isSelected = selected?.id === s.id;
+                                    return (
+                                        <tr key={s.id}
+                                            onClick={() => setSelected(isSelected ? null : s)}
+                                            className={cn("border-b border-border/60 cursor-pointer transition-colors hover:bg-muted/30",
+                                                isSelected && "bg-muted/50")}>
+                                            <td className="px-5 py-3.5 font-medium whitespace-nowrap">
+                                                {s.patient_name}
+                                                <span className="ml-1.5 text-[10px] text-muted-foreground font-mono">{s.patient_code}</span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">Dr. {s.doctor_name}</td>
+                                            <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.session_type_name}</td>
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                <p className="text-xs font-medium">{dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                                                <p className="text-[11px] text-muted-foreground font-mono">{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.duration_minutes} min</td>
+                                            <td className="px-5 py-3.5">
+                                                <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium whitespace-nowrap", cfg.cls)}>{cfg.label}</Badge>
+                                            </td>
+                                            <td className="px-5 py-3.5">
+                                                <button
+                                                    onClick={e => { e.stopPropagation(); setFormSession(s); }}
+                                                    className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                                                    title="Open session form">
+                                                    <ClipboardList className="w-3.5 h-3.5" /> Form
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {total > LIMIT && (
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Showing {(page - 1) * LIMIT + 1}–{Math.min(page * LIMIT, total)} of {total}</span>
+                        <div className="flex gap-1">
+                            <button disabled={page === 1} onClick={() => setPage(page - 1)} className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40 hover:bg-muted transition-colors">Prev</button>
+                            <button disabled={page * LIMIT >= total} onClick={() => setPage(page + 1)} className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40 hover:bg-muted transition-colors">Next</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Detail panel */}
+            {selected && (
+                <SessionDetail
+                    session={selected}
+                    onClose={() => setSelected(null)}
+                    onFormOpen={() => { setFormSession(selected); }}
+                />
+            )}
+
+            <NewSessionModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} />
+
+            {formSession && (
+                <SessionFormModal
+                    sessionId={formSession.id}
+                    sessionTitle={`${formSession.patient_name} · ${formSession.session_type_name}`}
+                    onClose={() => setFormSession(null)}
+                />
+            )}
         </div>
     );
 }

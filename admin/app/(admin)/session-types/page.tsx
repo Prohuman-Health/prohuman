@@ -1,87 +1,289 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, X } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Plus, Search, Pencil, Trash2, X, Loader2, Clock, IndianRupee, AlertCircle, RefreshCw, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { sessionTypesApi, SessionType, formsApi, Form } from "@/lib/api";
 
-const SESSION_TYPES = [
-    { id: "st1", name: "Initial Evaluation", duration: 60, color: "#6366f1", formAssigned: "Initial Intake Form", status: "active" },
-    { id: "st2", name: "Follow-Up Session", duration: 45, color: "#10b981", formAssigned: "Follow-Up Notes", status: "active" },
-    { id: "st3", name: "Discharge Assessment", duration: 60, color: "#f59e0b", formAssigned: "Discharge Form", status: "active" },
-    { id: "st4", name: "Group Therapy", duration: 90, color: "#3b82f6", formAssigned: "None", status: "active" },
-    { id: "st5", name: "Home Exercise Review", duration: 30, color: "#ec4899", formAssigned: "None", status: "draft" },
-    { id: "st6", name: "Post-Surgical Rehab", duration: 75, color: "#8b5cf6", formAssigned: "Surgical Rehab Form", status: "active" },
-];
+const DOT_COLORS = ["bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-blue-500", "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-indigo-500"];
+
+// ── Session Type Modal ──────────────────────────────────────────────────────
+function SessionTypeModal({ open, initial, onClose, onSaved }: {
+    open: boolean; initial?: SessionType | null; onClose: () => void; onSaved: () => void;
+}) {
+    const [form, setForm] = useState({ name: "", description: "", default_duration_minutes: "60", fee: "0", form_id: "" });
+    const [forms, setForms] = useState<Form[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Load published forms for the dropdown
+    useEffect(() => {
+        formsApi.list().then(all => setForms(all.filter(f => f.is_published))).catch(() => setForms([]));
+    }, []);
+
+    useEffect(() => {
+        if (initial) {
+            setForm({
+                name: initial.name,
+                description: initial.description ?? "",
+                default_duration_minutes: String(initial.default_duration_minutes),
+                fee: String(initial.fee),
+                form_id: initial.form_id ?? "",
+            });
+        } else {
+            setForm({ name: "", description: "", default_duration_minutes: "60", fee: "0", form_id: "" });
+        }
+        setError(null);
+    }, [initial, open]);
+
+    const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+        setForm(prev => ({ ...prev, [k]: e.target.value }));
+
+    async function submit(e: React.FormEvent) {
+        e.preventDefault();
+        if (!form.name.trim()) { setError("Name is required."); return; }
+        const dur = parseInt(form.default_duration_minutes);
+        if (isNaN(dur) || dur < 5) { setError("Duration must be at least 5 minutes."); return; }
+        setLoading(true); setError(null);
+        try {
+            const payload = {
+                name: form.name.trim(),
+                description: form.description.trim() || undefined,
+                default_duration_minutes: dur,
+                fee: parseFloat(form.fee) || 0,
+                ...(form.form_id ? { form_id: form.form_id } : { form_id: null }),
+            };
+            if (initial) await sessionTypesApi.update(initial.id, payload);
+            else await sessionTypesApi.create(payload);
+            onSaved(); onClose();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to save");
+        } finally { setLoading(false); }
+    }
+
+    if (!open) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-border/60">
+                    <h2 className="font-bold text-base">{initial ? "Edit Session Type" : "New Session Type"}</h2>
+                    <button onClick={onClose} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                <form onSubmit={submit} noValidate>
+                    <div className="px-6 py-5 space-y-4">
+                        {error && (
+                            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
+                                <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                            </div>
+                        )}
+                        <Field label="Name" required>
+                            <Input className="rounded-xl" placeholder="e.g. Initial Evaluation" value={form.name} onChange={set("name")} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Duration (min)" required>
+                                <div className="relative">
+                                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                    <Input type="number" min={5} className="pl-9 rounded-xl" value={form.default_duration_minutes} onChange={set("default_duration_minutes")} />
+                                </div>
+                            </Field>
+                            <Field label="Fee (₹)">
+                                <div className="relative">
+                                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                    <Input type="number" min={0} className="pl-9 rounded-xl" value={form.fee} onChange={set("fee")} />
+                                </div>
+                            </Field>
+                        </div>
+
+                        {/* Linked Form picker */}
+                        <Field label="Linked Form">
+                            <div className="relative">
+                                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                                <select value={form.form_id} onChange={set("form_id")}
+                                    className="w-full h-10 pl-9 pr-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
+                                    <option value="">No form (optional)</option>
+                                    {forms.map(f => (
+                                        <option key={f.id} value={f.id}>{f.title}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                                Patients will fill this form after each session of this type. Only published forms appear.
+                            </p>
+                        </Field>
+
+                        <Field label="Description">
+                            <textarea value={form.description} onChange={set("description")} rows={2}
+                                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                                placeholder="Brief description of what this session involves…" />
+                        </Field>
+                    </div>
+                    <div className="px-6 py-4 border-t border-border/60 flex justify-end gap-3">
+                        <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+                        <Button type="submit" disabled={loading} className="rounded-xl gap-2 min-w-[100px]">
+                            {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> : initial ? "Save Changes" : "Create"}
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+    return (
+        <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
+            {children}
+        </div>
+    );
+}
+
+function Skeleton({ className }: { className?: string }) {
+    return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
+
+function DeleteConfirm({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
+    const [loading, setLoading] = useState(false);
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                        <AlertCircle className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div>
+                        <p className="font-bold text-base">Delete Session Type?</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">"{name}" will be permanently removed.</p>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                    <Button variant="outline" className="rounded-xl" onClick={onCancel}>Cancel</Button>
+                    <Button className="rounded-xl bg-red-600 hover:bg-red-700 gap-2" onClick={async () => { setLoading(true); await onConfirm(); setLoading(false); }}>
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Delete
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function SessionTypesPage() {
+    const [types, setTypes] = useState<SessionType[]>([]);
+    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
-    const filtered = SESSION_TYPES.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editing, setEditing] = useState<SessionType | null>(null);
+    const [deleting, setDeleting] = useState<SessionType | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { setTypes(await sessionTypesApi.list()); }
+        catch { setTypes([]); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const filtered = types.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+
+    async function handleDelete() {
+        if (!deleting) return;
+        await sessionTypesApi.delete(deleting.id);
+        setDeleting(null); load();
+    }
 
     return (
         <div className="flex flex-col gap-4 p-4 md:p-5">
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <h1 className="text-xl md:text-2xl font-bold tracking-tight">Session Types</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5 hidden sm:block">Define the types of sessions offered at your clinic.</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">{types.length} types configured</p>
                 </div>
-                <Button size="sm" className="gap-1.5 rounded-xl shrink-0">
-                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Type</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                    <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                        <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                    </button>
+                    <Button size="sm" className="gap-1.5 rounded-xl shrink-0" onClick={() => { setEditing(null); setModalOpen(true); }}>
+                        <Plus className="w-4 h-4" /><span className="hidden sm:inline">New Type</span>
+                    </Button>
+                </div>
             </div>
 
             <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input placeholder="Search session types..." className="pl-9 rounded-xl bg-white" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <Input placeholder="Search session types..." className="pl-9 rounded-xl bg-white" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
 
-            {/* Responsive grid: 1 col mobile, 2 col sm, 3 col lg */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                {filtered.map((s) => (
-                    <div key={s.id} className="bg-white rounded-2xl p-4 md:p-5 space-y-4 hover:shadow-sm transition-shadow">
+                {loading ? (
+                    Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44" />)
+                ) : filtered.length === 0 ? (
+                    <div className="col-span-full bg-white rounded-2xl p-12 text-center text-muted-foreground text-sm">
+                        {search ? "No session types match your search" : "No session types yet. Create your first one!"}
+                    </div>
+                ) : filtered.map((t, i) => (
+                    <div key={t.id} className="bg-white rounded-2xl p-4 md:p-5 space-y-4 hover:shadow-sm transition-shadow border border-border/40">
                         <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: s.color + "20" }}>
-                                    <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: s.color }} />
+                                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                                    <div className={cn("w-3.5 h-3.5 rounded-full", DOT_COLORS[i % DOT_COLORS.length])} />
                                 </div>
-                                <p className="font-semibold text-sm leading-tight">{s.name}</p>
+                                <p className="font-semibold text-sm leading-tight">{t.name}</p>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                                <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
+                                <button onClick={() => { setEditing(t); setModalOpen(true); }}
+                                    className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
                                     <Pencil className="w-3.5 h-3.5" />
                                 </button>
-                                <button className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                                <button onClick={() => setDeleting(t)}
+                                    className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                                     <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                             </div>
                         </div>
+
+                        {t.description && (
+                            <p className="text-xs text-muted-foreground -mt-2 leading-relaxed line-clamp-2">{t.description}</p>
+                        )}
+
                         <div className="bg-muted/50 rounded-xl p-3 space-y-2">
                             <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Duration</span>
-                                <span className="font-semibold">{s.duration} min</span>
+                                <span className="text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />Duration</span>
+                                <span className="font-semibold">{t.default_duration_minutes} min</span>
                             </div>
-                            <div className="flex justify-between text-xs gap-2">
-                                <span className="text-muted-foreground shrink-0">Form</span>
-                                <span className={cn("font-semibold text-right truncate", s.formAssigned === "None" ? "text-red-500" : "text-foreground")}>
-                                    {s.formAssigned}
-                                </span>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground flex items-center gap-1"><IndianRupee className="w-3 h-3" />Fee</span>
+                                <span className="font-semibold">₹{t.fee.toLocaleString("en-IN")}</span>
                             </div>
                         </div>
+
                         <div className="flex items-center justify-between">
-                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium capitalize",
-                                s.status === "active" ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground"
-                            )}>
-                                {s.status}
+                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium",
+                                t.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
+                                {t.is_active ? "Active" : "Inactive"}
                             </Badge>
-                            {s.formAssigned === "None" && (
-                                <button className="text-[11px] text-blue-600 hover:underline font-medium">Assign Form →</button>
+                            {t.form_id ? (
+                                <span className="flex items-center gap-1 text-[11px] text-blue-600 font-medium">
+                                    <FileText className="w-3 h-3" />
+                                    {t.form_title ?? "Form linked"}
+                                </span>
+                            ) : (
+                                <span className="text-[11px] text-muted-foreground">No form</span>
                             )}
                         </div>
                     </div>
                 ))}
             </div>
+
+            <SessionTypeModal open={modalOpen} initial={editing} onClose={() => setModalOpen(false)} onSaved={load} />
+            {deleting && <DeleteConfirm name={deleting.name} onConfirm={handleDelete} onCancel={() => setDeleting(null)} />}
         </div>
     );
 }
