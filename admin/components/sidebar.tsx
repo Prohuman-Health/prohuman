@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
 
 const menuItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -39,6 +40,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onClose }: SidebarProps) {
     const pathname = usePathname();
+    const { logout } = useAuth();
     const [dirOpen, setDirOpen] = useState(true);
 
     const isDirectoryActive = directoryItems.some((item) => pathname === item.href);
@@ -155,7 +157,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                         );
                     })}
                     <li>
-                        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all">
+                        <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-all">
                             <LogOut className="w-4 h-4 shrink-0" />
                             Logout
                         </button>
