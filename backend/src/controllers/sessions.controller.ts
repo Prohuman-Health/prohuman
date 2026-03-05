@@ -9,11 +9,11 @@ export const listSessions = asyncHandler(async (req: Request, res: Response) => 
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const conditions = ["1=1"]; const vals: unknown[] = []; let i = 1;
   if (patient_id) { conditions.push(`s.patient_id = $${i++}`); vals.push(patient_id); }
-  if (doctor_id)  { conditions.push(`s.doctor_id = $${i++}`);  vals.push(doctor_id); }
-  if (branch_id)  { conditions.push(`s.branch_id = $${i++}`);  vals.push(branch_id); }
-  if (status)     { conditions.push(`s.status = $${i++}`);     vals.push(status); }
-  if (from)       { conditions.push(`s.scheduled_at >= $${i++}`); vals.push(from); }
-  if (to)         { conditions.push(`s.scheduled_at <= $${i++}`); vals.push(to); }
+  if (doctor_id) { conditions.push(`s.doctor_id = $${i++}`); vals.push(doctor_id); }
+  if (branch_id) { conditions.push(`s.branch_id = $${i++}`); vals.push(branch_id); }
+  if (status) { conditions.push(`s.status = $${i++}`); vals.push(status); }
+  if (from) { conditions.push(`s.scheduled_at >= $${i++}`); vals.push(from); }
+  if (to) { conditions.push(`s.scheduled_at <= $${i++}`); vals.push(to); }
   vals.push(parseInt(limit), offset);
   const result = await query(
     `SELECT s.*, p.full_name AS patient_name, p.patient_code,
@@ -81,9 +81,49 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
     const totalToCreate = recurrence ? recurrence.total_sessions : 1;
     const intervalDays = recurrence?.interval_days ?? (
       recurrence?.pattern === "daily" ? 1 :
-      recurrence?.pattern === "weekly" ? 7 :
-      recurrence?.pattern === "biweekly" ? 14 : 7
+        recurrence?.pattern === "weekly" ? 7 :
+          recurrence?.pattern === "biweekly" ? 14 : 7
     );
+
+    // ── Clash detection ────────────────────────────────────────────────────────
+    // Collect all clashing slots upfront so we can report them all at once
+    const clashes: string[] = [];
+
+    for (let n = 0; n < totalToCreate; n++) {
+      const slotDate = new Date(scheduledDate);
+      if (n > 0) slotDate.setDate(slotDate.getDate() + intervalDays * n);
+
+      // Two sessions overlap when:
+      //   new_start  < existing_end  AND  new_end  > existing_start
+      // i.e.  slotDate < (existing.scheduled_at + existing.duration_minutes)
+      //        AND  (slotDate + duration) > existing.scheduled_at
+      const clash = await client.query(
+        `SELECT id, scheduled_at, duration_minutes
+         FROM sessions
+         WHERE doctor_id = $1
+           AND status NOT IN ('cancelled', 'no-show', 'late-cancellation')
+           AND scheduled_at < ($2::timestamptz + ($3 || ' minutes')::interval)
+           AND (scheduled_at + (duration_minutes || ' minutes')::interval) > $2::timestamptz`,
+        [doctor_id, slotDate.toISOString(), duration]
+      );
+
+      if (clash.rows.length > 0) {
+        const conflicting = new Date(clash.rows[0].scheduled_at);
+        clashes.push(
+          `${conflicting.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} ` +
+          `at ${conflicting.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`
+        );
+      }
+    }
+
+    if (clashes.length > 0) {
+      const noun = clashes.length === 1 ? "slot clashes" : "slots clash";
+      throw ApiError.conflict(
+        `Doctor already has a session during: ${clashes.join(", ")}. ` +
+        `Please choose a different time${clashes.length > 1 ? "s" : ""}.`
+      );
+    }
+    // ── End clash detection ───────────────────────────────────────────────────
 
     for (let n = 0; n < totalToCreate; n++) {
       const date = new Date(scheduledDate);
@@ -93,7 +133,7 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
                                pre_session_notes, series_id, treatment_plan_id, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, scheduled_at, status`,
         [patient_id, doctor_id, branch_id, session_type_id, date.toISOString(), duration,
-         pre_session_notes ?? null, series_id, treatment_plan_id ?? null, req.user!.sub]
+          pre_session_notes ?? null, series_id, treatment_plan_id ?? null, req.user!.sub]
       );
       sessions.push(row.rows[0]);
     }
@@ -104,6 +144,7 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
 
   ApiResponse.created(res, session.length === 1 ? session[0] : session);
 });
+
 
 export const cancelSession = asyncHandler(async (req: Request, res: Response) => {
   const { reason, cancel_series } = req.body;
@@ -257,8 +298,8 @@ export const submitSessionForm = asyncHandler(async (req: Request, res: Response
         `INSERT INTO session_form_responses (session_id, form_id, question_id, answer_text, answer_value, answer_options)
          VALUES ($1,$2,$3,$4,$5,$6)`,
         [req.params.id, form_id, a.question_id,
-         a.answer_text ?? null, a.answer_value ?? null,
-         a.answer_options ? JSON.stringify(a.answer_options) : null]
+        a.answer_text ?? null, a.answer_value ?? null,
+        a.answer_options ? JSON.stringify(a.answer_options) : null]
       );
     }
   });
@@ -274,8 +315,8 @@ export const updateSessionForm = asyncHandler(async (req: Request, res: Response
          SET answer_text = $1, answer_value = $2, answer_options = $3
          WHERE session_id = $4 AND question_id = $5`,
         [a.answer_text ?? null, a.answer_value ?? null,
-         a.answer_options ? JSON.stringify(a.answer_options) : null,
-         req.params.id, a.question_id]
+        a.answer_options ? JSON.stringify(a.answer_options) : null,
+        req.params.id, a.question_id]
       );
     }
   });

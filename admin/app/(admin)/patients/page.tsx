@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import type { Patient } from "@/lib/api";
 import { NewPatientModal } from "@/components/modals/new-patient-modal";
+import { PatientHistoryModal } from "@/components/modals/patient-history-modal";
 
 const AVATAR_COLORS = ["bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700", "bg-emerald-100 text-emerald-700", "bg-amber-100 text-amber-700", "bg-pink-100 text-pink-700", "bg-cyan-100 text-cyan-700"];
 
@@ -19,6 +20,7 @@ export default function PatientsPage() {
     const { patients, total, loading, filter, page, search, setFilter, setPage, setSearch, refresh } = usePatients();
     const [selected, setSelected] = useState<Patient | null>(null);
     const [newPatientOpen, setNewPatientOpen] = useState(false);
+    const [historyPatient, setHistoryPatient] = useState<Patient | null>(null);
     const LIMIT = 20;
 
     const filtered = patients.filter(p =>
@@ -170,7 +172,7 @@ export default function PatientsPage() {
                             </div>
                         )}
                         <div className="space-y-2">
-                            <Button size="sm" className="w-full rounded-xl text-xs">View Full History</Button>
+                            <Button size="sm" className="w-full rounded-xl text-xs" onClick={() => setHistoryPatient(selected)}>View Full History</Button>
                             <Button variant="outline" size="sm" className="w-full rounded-xl text-xs">Edit Patient</Button>
                         </div>
                     </div>
@@ -178,6 +180,7 @@ export default function PatientsPage() {
             )}
             {/* New Patient Modal */}
             <NewPatientModal open={newPatientOpen} onClose={() => setNewPatientOpen(false)} />
+            <PatientHistoryModal patient={historyPatient} onClose={() => setHistoryPatient(null)} />
         </div>
     );
 }

@@ -8,6 +8,20 @@ export interface Patient {
 }
 export interface PatientListResponse { patients: Patient[]; total: number; page: number; limit: number; }
 
+export interface PatientSession {
+    id: string; scheduled_at: string; duration_minutes: number;
+    status: string; attendance: string | null;
+    session_type: string; doctor_name: string; branch: string;
+}
+export interface PatientInvoice {
+    id: string; created_at: string; amount: number; status: string; notes: string | null;
+}
+export interface TimelineItem {
+    type: "session" | "invoice" | "document";
+    id: string; date: string; label: string;
+    status?: string; amount?: number; category?: string;
+}
+
 export const patientsApi = {
     list: (params?: Record<string, string>) =>
         request<PatientListResponse>(`/patients?${new URLSearchParams(params)}`),
@@ -20,6 +34,8 @@ export const patientsApi = {
         request<Patient>(`/patients/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     deactivate: (id: string) =>
         request<null>(`/patients/${id}`, { method: "DELETE" }),
-    sessions: (id: string) => request<unknown[]>(`/patients/${id}/sessions`),
-    timeline: (id: string) => request<unknown[]>(`/patients/${id}/timeline`),
+    sessions: (id: string) => request<PatientSession[]>(`/patients/${id}/sessions`),
+    invoices: (id: string) => request<PatientInvoice[]>(`/patients/${id}/invoices`),
+    timeline: (id: string) => request<TimelineItem[]>(`/patients/${id}/timeline`),
+
 };
