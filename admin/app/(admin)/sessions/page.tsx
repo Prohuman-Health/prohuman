@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
     Search, RefreshCw, CalendarDays, X, Loader2, FileText,
     CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
-    ClipboardList,
+    ClipboardList, UserX, ChevronDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -259,9 +259,69 @@ function SessionFormModal({ sessionId, sessionTitle, onClose }: {
     );
 }
 
+// ── Attendance Actions ────────────────────────────────────────────────────────
+function AttendanceActions({ session, onDone }: { session: Session; onDone: () => void }) {
+    const [open, setOpen] = useState(false);
+    const [marking, setMarking] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const isTerminal = ["completed", "cancelled", "no-show", "late-cancellation"].includes(session.status);
+    if (isTerminal) return null;
+
+    const OPTIONS = [
+        { value: "attended", label: "Mark Completed", icon: CheckCircle2, cls: "text-emerald-600 hover:bg-emerald-50" },
+        { value: "no-show", label: "Mark No-Show", icon: UserX, cls: "text-red-500   hover:bg-red-50" },
+        { value: "late-cancellation", label: "Late Cancellation", icon: XCircle, cls: "text-orange-500 hover:bg-orange-50" },
+    ];
+
+    async function mark(attendance: string) {
+        setMarking(attendance); setError(null);
+        try {
+            await sessionsApi.markAttendance(session.id, attendance);
+            setOpen(false);
+            onDone();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed");
+        } finally { setMarking(null); }
+    }
+
+    return (
+        <div className="relative">
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-border bg-muted/30 text-xs font-medium hover:bg-muted transition-colors"
+            >
+                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Mark Attendance</span>
+                <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+            </button>
+            {open && (
+                <div className="absolute bottom-full mb-1 left-0 right-0 bg-white rounded-xl border border-border shadow-lg overflow-hidden z-10">
+                    {error && (
+                        <p className="px-3 py-2 text-[11px] text-red-500 border-b border-border">{error}</p>
+                    )}
+                    {OPTIONS.map(o => {
+                        const Icon = o.icon;
+                        const busy = marking === o.value;
+                        return (
+                            <button key={o.value} onClick={() => mark(o.value)} disabled={!!marking}
+                                className={cn("w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium transition-colors text-left",
+                                    o.cls, !!marking && "opacity-60 cursor-wait")}>
+                                {busy
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    : <Icon className="w-3.5 h-3.5" />}
+                                {o.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Session Detail Panel ───────────────────────────────────────────────────────
-function SessionDetail({ session, onClose, onFormOpen }: {
-    session: Session; onClose: () => void; onFormOpen: () => void;
+function SessionDetail({ session, onClose, onFormOpen, onAttended }: {
+    session: Session; onClose: () => void; onFormOpen: () => void; onAttended: () => void;
 }) {
     const cfg = STATUS_CONFIG[session.status] ?? STATUS_CONFIG.pending;
     const dt = new Date(session.scheduled_at);
@@ -312,6 +372,7 @@ function SessionDetail({ session, onClose, onFormOpen }: {
             </div>
 
             <div className="p-4 border-t border-border/60 space-y-2">
+                <AttendanceActions session={session} onDone={onAttended} />
                 <Button size="sm" className="w-full rounded-xl gap-2" onClick={onFormOpen}>
                     <ClipboardList className="w-3.5 h-3.5" />
                     {session.status === "completed" ? "View Form Responses" : "Fill Session Form"}
@@ -329,6 +390,12 @@ export default function SessionsPage() {
     const [selected, setSelected] = useState<Session | null>(null);
     const [formSession, setFormSession] = useState<Session | null>(null);
     const LIMIT = 25;
+
+    // After attendance is marked, refresh and update selected panel
+    function handleAttended() {
+        refresh();
+        setSelected(null); // close detail panel to force re-read of fresh data
+    }
 
     const filtered = sessions.filter(s =>
         !search ||
@@ -418,12 +485,22 @@ export default function SessionsPage() {
                                                 <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium whitespace-nowrap", cfg.cls)}>{cfg.label}</Badge>
                                             </td>
                                             <td className="px-5 py-3.5">
-                                                <button
-                                                    onClick={e => { e.stopPropagation(); setFormSession(s); }}
-                                                    className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                                                    title="Open session form">
-                                                    <ClipboardList className="w-3.5 h-3.5" /> Form
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={e => { e.stopPropagation(); setFormSession(s); }}
+                                                        className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                                                        title="Open session form">
+                                                        <ClipboardList className="w-3.5 h-3.5" /> Form
+                                                    </button>
+                                                    {!["completed", "cancelled", "no-show", "late-cancellation"].includes(s.status) && (
+                                                        <button
+                                                            onClick={async e => { e.stopPropagation(); await sessionsApi.markAttendance(s.id, "attended"); refresh(); }}
+                                                            className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
+                                                            title="Mark as completed">
+                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Done
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -450,6 +527,7 @@ export default function SessionsPage() {
                     session={selected}
                     onClose={() => setSelected(null)}
                     onFormOpen={() => { setFormSession(selected); }}
+                    onAttended={handleAttended}
                 />
             )}
 
