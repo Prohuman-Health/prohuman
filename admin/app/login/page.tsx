@@ -25,8 +25,15 @@ function LoginInner() {
         }
     }, [params]);
 
+    // Single source of truth for post-login redirect.
+    // When login() resolves it sets user in context → this effect fires → redirect.
     useEffect(() => {
-        if (!loading && user) router.replace("/dashboard");
+        if (loading) return;
+        if (!user) return;
+        // Check onboarding status before deciding where to go
+        onboarding.status()
+            .then(s => router.replace(s.completed ? "/dashboard" : "/onboarding"))
+            .catch(() => router.replace("/dashboard")); // if status check fails, go to dashboard
     }, [user, loading, router]);
 
     const handleEmailLogin = async (e: React.FormEvent) => {
@@ -35,8 +42,8 @@ function LoginInner() {
         setSubmitting(true);
         try {
             await login(email, password);
-            const status = await onboarding.status().catch(() => ({ completed: true }));
-            router.replace(status.completed ? "/dashboard" : "/onboarding");
+            // Don't redirect here — the useEffect above watches user and will do it.
+            // Calling router.replace here AND in the effect caused the double-login race.
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Login failed");
         } finally {

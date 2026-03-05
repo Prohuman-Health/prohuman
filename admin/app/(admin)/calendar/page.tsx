@@ -88,7 +88,7 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="flex flex-col lg:flex-row h-full gap-4 p-4 md:p-5 overflow-auto lg:overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-4 p-4 md:p-5 min-h-full">
             {/* ── Main calendar area ─────────────────────────────────────────── */}
             <div className="flex flex-col flex-1 min-w-0 gap-4">
                 {/* Header */}
@@ -127,7 +127,7 @@ export default function CalendarPage() {
                 </div>
 
                 {/* Calendar grid */}
-                <div className="bg-white rounded-2xl p-4 md:p-5 flex-1 flex flex-col">
+                <div className="bg-white rounded-2xl p-4 md:p-5">
                     {/* Month nav */}
                     <div className="flex items-center justify-between mb-5">
                         <h2 className="text-lg font-bold">{MONTHS[viewMonth]} {viewYear}</h2>
@@ -153,7 +153,7 @@ export default function CalendarPage() {
                     </div>
 
                     {/* Day cells */}
-                    <div className="grid grid-cols-7 gap-1 flex-1">
+                    <div className="grid grid-cols-7 gap-1">
                         {cells.map((day, i) => {
                             if (!day) return <div key={`empty-${i}`} />;
                             const key = dateKey(viewYear, viewMonth, day);
@@ -163,7 +163,7 @@ export default function CalendarPage() {
 
                             return (
                                 <div key={day} onClick={() => setSelectedDay(day === selectedDay ? null : day)}
-                                    className={cn("rounded-xl p-1.5 cursor-pointer transition-all min-h-[72px] flex flex-col group relative",
+                                    className={cn("rounded-xl p-1.5 cursor-pointer transition-all min-h-[80px] flex flex-col group relative",
                                         isSelected ? "bg-foreground text-white" : "hover:bg-muted/40")}>
                                     <span className={cn("text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full mb-1",
                                         isToday && !isSelected ? "bg-foreground text-white" : "",
@@ -210,7 +210,7 @@ export default function CalendarPage() {
             {/* ── Right panel ────────────────────────────────────────────────── */}
             <div className="w-full lg:w-[260px] shrink-0 flex flex-col gap-3">
                 {/* Day sessions */}
-                <div className="bg-white rounded-2xl flex flex-col overflow-hidden flex-1">
+                <div className="bg-white rounded-2xl flex flex-col overflow-hidden min-h-[320px] lg:min-h-0 lg:flex-1">
                     <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
                         <div>
                             <h2 className="font-semibold text-sm">
