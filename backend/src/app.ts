@@ -26,17 +26,22 @@ if (env.NODE_ENV !== "test") {
 }
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-app.use(
-  "/api",
-  rateLimit({
-    windowMs: 15 * 60 * 1000,   // 15 min
-    max: 300,
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
+// Skip rate limiting in development — the dashboard makes many parallel
+// requests per page load and 300/15 min is easily exhausted during local work.
+if (env.NODE_ENV !== "development") {
+  app.use(
+    "/api",
+    rateLimit({
+      windowMs: 15 * 60 * 1000,   // 15 min
+      max: 2000,                   // raised from 300 — admin panel is request-heavy
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: "Too many requests, please try again later." },
+    })
+  );
+}
 
-// Tighter limit on auth endpoints
+// Tighter limit on auth endpoints (applies in all environments)
 app.use(
   "/api/auth/login",
   rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: "Too many login attempts" })
