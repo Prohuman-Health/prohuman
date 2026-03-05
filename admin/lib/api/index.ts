@@ -14,3 +14,5 @@ export * from "./staff";
 export * from "./catalog";
 export * from "./clinic";
 export * from "./whatsapp";
+export * from "./branches";
+

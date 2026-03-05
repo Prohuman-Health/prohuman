@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Loader2, CalendarDays, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { useStaff } from "@/lib/contexts/staff-context";
 import { useSessionTypes } from "@/lib/contexts/catalog-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useAuth } from "@/lib/auth-context";
-import { sessionsApi } from "@/lib/api";
+import { sessionsApi, branchesApi, Branch } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -30,6 +30,10 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
 
+    // Branches — only loaded if user has no branch_id
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [branchesLoading, setBranchesLoading] = useState(false);
+
     const todayStr = new Date().toISOString().slice(0, 10);
     const [form, setForm] = useState({
         patient_id: prefill?.patientId ?? "",
@@ -38,7 +42,29 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         date: prefill?.date ?? todayStr,
         time: "09:00",
         notes: "",
+        branch_id: user?.branch_id ?? "",
     });
+
+    // Load branches when modal opens (if no branch on user)
+    useEffect(() => {
+        if (!open) return;
+        // Reset success/error on open
+        setErrors({}); setApiError(null); setSuccess(false);
+        // Pre-fill branch from user if available
+        setForm(prev => ({ ...prev, branch_id: user?.branch_id ?? "" }));
+
+        if (!user?.branch_id) {
+            setBranchesLoading(true);
+            branchesApi.list()
+                .then(b => {
+                    setBranches(b);
+                    // Auto-select first branch if only one
+                    if (b.length === 1) setForm(prev => ({ ...prev, branch_id: b[0].id }));
+                })
+                .catch(() => {/* silent */ })
+                .finally(() => setBranchesLoading(false));
+        }
+    }, [open, user?.branch_id]);
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -53,7 +79,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!form.session_type_id) errs.session_type_id = "Select a session type";
         if (!form.date) errs.date = "Date is required";
         if (!form.time) errs.time = "Time is required";
-        if (!user?.branch_id) errs._global = "Your account has no branch assigned. Please contact your administrator.";
+        if (!form.branch_id) errs.branch_id = "Select a branch";
         setErrors(errs);
         return Object.keys(errs).length === 0;
     }
@@ -69,7 +95,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                 patient_id: form.patient_id,
                 doctor_id: form.doctor_id,
                 session_type_id: form.session_type_id,
-                branch_id: user!.branch_id!,
+                branch_id: form.branch_id,
                 scheduled_at,
                 ...(type?.default_duration_minutes ? { duration_minutes: type.default_duration_minutes } : {}),
                 ...(form.notes.trim() ? { pre_session_notes: form.notes.trim() } : {}),
@@ -78,7 +104,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
             setSuccess(true);
             setTimeout(() => {
                 setSuccess(false);
-                setForm({ patient_id: "", doctor_id: "", session_type_id: "", date: todayStr, time: "09:00", notes: "" });
+                setForm({ patient_id: "", doctor_id: "", session_type_id: "", date: todayStr, time: "09:00", notes: "", branch_id: user?.branch_id ?? "" });
                 onClose();
             }, 1200);
         } catch (err: unknown) {
@@ -92,6 +118,8 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     }
 
     if (!open) return null;
+
+    const needsBranchPicker = !user?.branch_id;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -114,15 +142,36 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
 
                 <form onSubmit={submit} noValidate>
                     <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
-                        {(apiError || errors._global) && (
+                        {apiError && (
                             <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
-                                <AlertCircle className="w-4 h-4 shrink-0" />{apiError ?? errors._global}
+                                <AlertCircle className="w-4 h-4 shrink-0" />{apiError}
                             </div>
                         )}
                         {success && (
                             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 text-sm text-emerald-700">
                                 <CheckCircle2 className="w-4 h-4 shrink-0" />Session scheduled!
                             </div>
+                        )}
+
+                        {/* Branch picker — only shown when user has no branch assigned */}
+                        {needsBranchPicker && (
+                            <Field label="Branch" required error={errors.branch_id}>
+                                {branchesLoading ? (
+                                    <div className="h-10 rounded-xl border border-input bg-muted animate-pulse" />
+                                ) : branches.length === 0 ? (
+                                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-sm text-amber-700">
+                                        <AlertCircle className="w-4 h-4 shrink-0" />
+                                        No branches found. Please create a branch first.
+                                    </div>
+                                ) : (
+                                    <select value={form.branch_id} onChange={set("branch_id")}
+                                        className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
+                                            errors.branch_id && "border-red-400")}>
+                                        <option value="">Select branch…</option>
+                                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </select>
+                                )}
+                            </Field>
                         )}
 
                         <Field label="Patient" required error={errors.patient_id}>
