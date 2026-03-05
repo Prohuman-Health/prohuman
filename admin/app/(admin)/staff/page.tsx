@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { useStaff } from "@/lib/contexts/staff-context";
 import { useState } from "react";
 import { NewStaffModal } from "@/components/modals/new-staff-modal";
+import { EditStaffModal } from "@/components/modals/edit-staff-modal";
+import { staffApi, StaffMember } from "@/lib/api";
 
 const ROLE_COLORS: Record<string, string> = {
     admin: "bg-violet-100 text-violet-700",
@@ -28,12 +30,28 @@ export default function StaffPage() {
     const { staff, loading, showInactive, setShowInactive, refresh } = useStaff();
     const [search, setSearch] = useState("");
     const [addStaffOpen, setAddStaffOpen] = useState(false);
+    const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+    const [togglingId, setTogglingId] = useState<string | null>(null);
 
     const filtered = staff.filter(s =>
         !search || s.full_name.toLowerCase().includes(search.toLowerCase()) ||
         s.email.toLowerCase().includes(search.toLowerCase()) ||
         s.role.toLowerCase().includes(search.toLowerCase())
     );
+
+    async function toggleActive(s: StaffMember, e: React.MouseEvent) {
+        e.stopPropagation();
+        if (togglingId === s.id) return;
+        setTogglingId(s.id);
+        try {
+            await staffApi.update(s.id, { is_active: !s.is_active });
+            await refresh();
+        } catch {
+            // silent fail — error would need a toast system
+        } finally {
+            setTogglingId(null);
+        }
+    }
 
     return (
         <>
@@ -57,8 +75,8 @@ export default function StaffPage() {
                         <Input placeholder="Search staff…" className="pl-9 rounded-xl bg-white" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
                     <div className="flex items-center gap-1 bg-white rounded-xl p-1">
-                        {[[false, "Active"], [true, "Inactive"]].map(([v, l]) => (
-                            <button key={String(v)} onClick={() => setShowInactive(v as boolean)}
+                        {([[false, "Active"], [true, "Inactive"]] as const).map(([v, l]) => (
+                            <button key={String(v)} onClick={() => setShowInactive(v)}
                                 className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all", showInactive === v ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
                                 {l}
                             </button>
@@ -112,8 +130,27 @@ export default function StaffPage() {
                                     </td>
                                     <td className="px-5 py-4">
                                         <div className="flex items-center gap-1">
-                                            <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"><Pencil className="w-3.5 h-3.5" /></button>
-                                            <button className={cn("p-1.5 transition-colors rounded-lg", s.is_active ? "text-muted-foreground hover:text-red-500 hover:bg-red-50" : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50")}>
+                                            {/* Edit button */}
+                                            <button
+                                                onClick={e => { e.stopPropagation(); setEditingStaff(s); }}
+                                                title="Edit staff"
+                                                className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                            </button>
+                                            {/* Activate / Deactivate button */}
+                                            <button
+                                                onClick={e => toggleActive(s, e)}
+                                                disabled={togglingId === s.id}
+                                                title={s.is_active ? "Deactivate" : "Activate"}
+                                                className={cn(
+                                                    "p-1.5 transition-colors rounded-lg",
+                                                    togglingId === s.id && "opacity-50 cursor-wait",
+                                                    s.is_active
+                                                        ? "text-muted-foreground hover:text-red-500 hover:bg-red-50"
+                                                        : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50"
+                                                )}
+                                            >
                                                 {s.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                                             </button>
                                         </div>
@@ -124,7 +161,9 @@ export default function StaffPage() {
                     </table>
                 </div>
             </div>
+
             <NewStaffModal open={addStaffOpen} onClose={() => setAddStaffOpen(false)} />
+            <EditStaffModal staff={editingStaff} onClose={() => setEditingStaff(null)} />
         </>
     );
 }
