@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Loader2, ShieldCheck, Stethoscope, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput, validatePhone } from "@/components/ui/phone-input";
 import { cn } from "@/lib/utils";
 import { useStaff } from "@/lib/contexts/staff-context";
 import { staffApi, doctorsApi } from "@/lib/api";
@@ -51,7 +52,7 @@ export function NewStaffModal({ open, onClose, doctorMode = false }: Props) {
         if (!form.full_name.trim()) errs.full_name = "Full name is required";
         if (!form.email.trim()) errs.email = "Email is required";
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = "Enter a valid email";
-        if (form.phone.trim() && !/^\+?[\d\s\-()]{7,15}$/.test(form.phone.trim())) errs.phone = "Enter a valid phone number";
+        if (form.phone) { const phoneErr = validatePhone(form.phone); if (phoneErr) errs.phone = phoneErr; }
         if (!form.role) errs.role = "Role is required";
         if (!form.password) errs.password = "Password is required";
         else if (form.password.length < 8) errs.password = "Password must be at least 8 characters";
@@ -159,8 +160,11 @@ export function NewStaffModal({ open, onClose, doctorMode = false }: Props) {
                                     placeholder="doctor@clinic.com" value={form.email} onChange={set("email")} />
                             </Field>
                             <Field label="Phone" error={errors.phone}>
-                                <Input className={cn("rounded-xl", errors.phone && "border-red-400")}
-                                    placeholder="+91 98765…" value={form.phone} onChange={set("phone")} />
+                                <PhoneInput
+                                    value={form.phone}
+                                    onChange={v => { setForm(prev => ({ ...prev, phone: v })); setErrors(prev => { const n = { ...prev }; delete n.phone; return n; }); }}
+                                    error={errors.phone}
+                                />
                             </Field>
                         </div>
 

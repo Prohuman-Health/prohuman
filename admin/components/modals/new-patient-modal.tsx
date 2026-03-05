@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, Loader2, User, Phone, Mail, Hash, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Loader2, User, Mail, Hash, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput, validatePhone } from "@/components/ui/phone-input";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import { useAuth } from "@/lib/auth-context";
@@ -37,8 +38,8 @@ export function NewPatientModal({ open, onClose }: Props) {
     function validate(): boolean {
         const errs: Record<string, string> = {};
         if (!form.full_name.trim()) errs.full_name = "Full name is required";
-        if (!form.phone.trim()) errs.phone = "Phone number is required";
-        else if (!/^\+?[\d\s\-()]{7,15}$/.test(form.phone.trim())) errs.phone = "Enter a valid phone number";
+        const phoneErr = validatePhone(form.phone);
+        if (phoneErr) errs.phone = phoneErr;
         if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = "Enter a valid email address";
         const age = parseInt(form.age);
         if (!form.age) errs.age = "Age is required";
@@ -124,11 +125,11 @@ export function NewPatientModal({ open, onClose }: Props) {
 
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Phone" required error={errors.phone}>
-                                <div className="relative">
-                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                                    <Input className={cn("pl-9 rounded-xl", errors.phone && "border-red-400")}
-                                        placeholder="+91 98765 43210" value={form.phone} onChange={set("phone")} />
-                                </div>
+                                <PhoneInput
+                                    value={form.phone}
+                                    onChange={v => { setForm(prev => ({ ...prev, phone: v })); setErrors(prev => { const n = { ...prev }; delete n.phone; return n; }); }}
+                                    error={errors.phone}
+                                />
                             </Field>
                             <Field label="Age" required error={errors.age}>
                                 <div className="relative">
