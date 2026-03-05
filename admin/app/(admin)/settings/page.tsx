@@ -1,49 +1,262 @@
 "use client";
 
-import { Bell, Lock, Palette, Globe, Database, ChevronRight } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Bell, Lock, Palette, Globe, Database, ChevronRight, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { settingsApi, Setting } from "@/lib/api";
 
-const SETTINGS_SECTIONS = [
-    { icon: Palette, label: "Clinic Branding", desc: "Logo, name, and colour theme", color: "bg-violet-100 text-violet-700" },
-    { icon: Bell, label: "Notifications", desc: "Email and in-app alert preferences", color: "bg-amber-100 text-amber-700" },
-    { icon: Lock, label: "Security & Access", desc: "Password policy and 2FA settings", color: "bg-red-100 text-red-700" },
-    { icon: Globe, label: "Timezone & Locale", desc: "Regional settings and date formats", color: "bg-blue-100 text-blue-700" },
-    { icon: Database, label: "Data & Backups", desc: "Export data and manage backups", color: "bg-emerald-100 text-emerald-700" },
+type Tab = "clinic" | "notifications" | "security" | "locale" | "data";
+
+const TABS: { id: Tab; label: string; icon: React.ElementType; color: string }[] = [
+    { id: "clinic", label: "Clinic Profile", icon: Building2, color: "bg-violet-100 text-violet-700" },
+    { id: "notifications", label: "Notifications", icon: Bell, color: "bg-amber-100 text-amber-700" },
+    { id: "security", label: "Security & Access", icon: Lock, color: "bg-red-100 text-red-700" },
+    { id: "locale", label: "Timezone & Locale", icon: Globe, color: "bg-blue-100 text-blue-700" },
+    { id: "data", label: "Data & Backups", icon: Database, color: "bg-emerald-100 text-emerald-700" },
 ];
 
-export default function SettingsPage() {
-    return (
-        <div className="flex flex-col gap-4 p-5 max-w-2xl">
-            <div>
-                <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">Configure your clinic's preferences and system settings.</p>
-            </div>
+const TIMEZONES = ["Asia/Kolkata", "Asia/Dubai", "Asia/Singapore", "Europe/London", "America/New_York", "America/Los_Angeles"];
+const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"];
 
-            <div className="space-y-2">
-                {SETTINGS_SECTIONS.map((s) => (
-                    <div key={s.label} className="bg-white rounded-2xl px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-shadow group">
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", s.color)}>
-                            <s.icon className="w-4.5 h-4.5" />
+function Skeleton({ className }: { className?: string }) {
+    return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
+
+export default function SettingsPage() {
+    const [activeTab, setActiveTab] = useState<Tab>("clinic");
+    const [settings, setSettings] = useState<Record<string, string>>({});
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const list: Setting[] = await settingsApi.list();
+            const map: Record<string, string> = {};
+            list.forEach(s => { map[s.key] = String(s.value ?? ""); });
+            setSettings(map);
+        } catch { /* use defaults */ }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+        setSettings(prev => ({ ...prev, [k]: e.target.value }));
+
+    async function save() {
+        setSaving(true);
+        try {
+            await Promise.all(Object.entries(settings).map(([k, v]) => settingsApi.upsert(k, v)));
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+        } catch { /* silently ignore */ }
+        finally { setSaving(false); }
+    }
+
+    const get = (k: string, fallback = "") => settings[k] ?? fallback;
+
+    return (
+        <div className="flex flex-col lg:flex-row h-full gap-4 p-4 md:p-5 overflow-auto lg:overflow-hidden">
+            {/* Sidebar tabs */}
+            <div className="w-full lg:w-56 shrink-0 flex flex-col gap-1">
+                <div className="flex items-center justify-between mb-2">
+                    <h1 className="text-xl font-bold tracking-tight">Settings</h1>
+                    <button onClick={load} className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80">
+                        <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+                    </button>
+                </div>
+                {TABS.map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                        className={cn("flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-all text-left",
+                            activeTab === tab.id ? "bg-foreground text-white" : "bg-white text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                            activeTab === tab.id ? "bg-white/10" : tab.color)}>
+                            <tab.icon className="w-3.5 h-3.5" />
                         </div>
-                        <div className="flex-1">
-                            <p className="font-semibold text-sm">{s.label}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{s.desc}</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                    </div>
+                        {tab.label}
+                    </button>
                 ))}
             </div>
 
-            <div className="bg-foreground text-white rounded-2xl p-5 flex items-center justify-between mt-2">
-                <div>
-                    <p className="font-bold">ProHuman Health Admin</p>
-                    <p className="text-xs text-white/60 mt-0.5">Version 1.0.0 · All systems operational</p>
-                </div>
-                <Button variant="outline" size="sm" className="rounded-xl text-xs bg-white/10 border-white/20 text-white hover:bg-white/20">
-                    Check for Updates
-                </Button>
+            {/* Main content */}
+            <div className="flex-1 bg-white rounded-2xl flex flex-col overflow-hidden">
+                {loading ? (
+                    <div className="p-6 space-y-4">
+                        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12" />)}
+                    </div>
+                ) : (
+                    <>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* ── Clinic Profile ─────────────────────────── */}
+                            {activeTab === "clinic" && (
+                                <Section title="Clinic Profile" desc="Your clinic's basic information displayed to staff and in reports.">
+                                    <Row label="Clinic Name" icon={Building2}>
+                                        <Input className="rounded-xl" value={get("clinic_name")} onChange={set("clinic_name")} placeholder="ProHuman Health Clinic" />
+                                    </Row>
+                                    <Row label="Phone Number" icon={Phone}>
+                                        <Input className="rounded-xl" value={get("clinic_phone")} onChange={set("clinic_phone")} placeholder="+91 98765 43210" />
+                                    </Row>
+                                    <Row label="Email Address" icon={Mail}>
+                                        <Input type="email" className="rounded-xl" value={get("clinic_email")} onChange={set("clinic_email")} placeholder="hello@prohuman.in" />
+                                    </Row>
+                                    <Row label="Address" icon={MapPin}>
+                                        <textarea rows={2} value={get("clinic_address")} onChange={set("clinic_address")}
+                                            placeholder="123 Health Street, Mumbai 400001"
+                                            className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
+                                    </Row>
+                                    <Row label="Working Hours" icon={Clock}>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <Input className="rounded-xl" value={get("working_hours_start", "09:00")} onChange={set("working_hours_start")} type="time" />
+                                            <Input className="rounded-xl" value={get("working_hours_end", "18:00")} onChange={set("working_hours_end")} type="time" />
+                                        </div>
+                                    </Row>
+                                    <Row label="Default Session Fee (₹)" icon={IndianRupee}>
+                                        <Input type="number" min={0} className="rounded-xl w-40" value={get("default_fee", "500")} onChange={set("default_fee")} />
+                                    </Row>
+                                </Section>
+                            )}
+
+                            {/* ── Notifications ───────────────────────────── */}
+                            {activeTab === "notifications" && (
+                                <Section title="Notifications" desc="Control when and how the system sends alerts to staff and patients.">
+                                    {[
+                                        { key: "notify_new_patient", label: "New patient registered", desc: "Alert admin when a new patient is created" },
+                                        { key: "notify_session_scheduled", label: "Session scheduled", desc: "Alert doctor when a session is booked" },
+                                        { key: "notify_session_cancelled", label: "Session cancelled", desc: "Alert relevant parties on cancellation" },
+                                        { key: "notify_no_show", label: "No-show alert", desc: "Flag sessions where patient didn't attend" },
+                                        { key: "notify_payment_pending", label: "Pending payment", desc: "Alert when a session payment is overdue" },
+                                    ].map(item => (
+                                        <div key={item.key} className="flex items-center justify-between py-3 border-b border-border/60 last:border-0">
+                                            <div>
+                                                <p className="text-sm font-medium">{item.label}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                                            </div>
+                                            <button onClick={() => setSettings(prev => ({ ...prev, [item.key]: prev[item.key] === "true" ? "false" : "true" }))}
+                                                className={cn("relative w-11 h-6 rounded-full transition-colors shrink-0",
+                                                    get(item.key) === "true" ? "bg-foreground" : "bg-muted")}>
+                                                <span className={cn("absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all",
+                                                    get(item.key) === "true" ? "left-5" : "left-0.5")} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </Section>
+                            )}
+
+                            {/* ── Security ──────────────────────────────────── */}
+                            {activeTab === "security" && (
+                                <Section title="Security & Access" desc="Configure authentication and access control settings.">
+                                    {[
+                                        { key: "require_2fa", label: "Require 2-Factor Auth", desc: "All staff must use 2FA to login" },
+                                        { key: "session_expiry_enabled", label: "Auto logout on inactivity", desc: "Log out staff after period of inactivity" },
+                                        { key: "allow_google_login", label: "Allow Google SSO", desc: "Staff can sign in with Google" },
+                                    ].map(item => (
+                                        <div key={item.key} className="flex items-center justify-between py-3 border-b border-border/60 last:border-0">
+                                            <div>
+                                                <p className="text-sm font-medium">{item.label}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                                            </div>
+                                            <button onClick={() => setSettings(prev => ({ ...prev, [item.key]: prev[item.key] === "true" ? "false" : "true" }))}
+                                                className={cn("relative w-11 h-6 rounded-full transition-colors shrink-0",
+                                                    get(item.key) === "true" ? "bg-foreground" : "bg-muted")}>
+                                                <span className={cn("absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all",
+                                                    get(item.key) === "true" ? "left-5" : "left-0.5")} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <Row label="Session Timeout (minutes)" icon={Clock}>
+                                        <Input type="number" min={5} className="rounded-xl w-28" value={get("session_timeout_minutes", "30")} onChange={set("session_timeout_minutes")} />
+                                    </Row>
+                                </Section>
+                            )}
+
+                            {/* ── Locale ─────────────────────────────────── */}
+                            {activeTab === "locale" && (
+                                <Section title="Timezone & Locale" desc="Set regional preferences for date formats and timezone.">
+                                    <Row label="Timezone" icon={Globe}>
+                                        <select value={get("timezone", "Asia/Kolkata")} onChange={set("timezone")}
+                                            className="w-full max-w-xs h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
+                                            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                        </select>
+                                    </Row>
+                                    <Row label="Date Format" icon={Globe}>
+                                        <select value={get("date_format", "DD/MM/YYYY")} onChange={set("date_format")}
+                                            className="w-full max-w-xs h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
+                                            {DATE_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+                                        </select>
+                                    </Row>
+                                    <Row label="Currency Symbol" icon={IndianRupee}>
+                                        <Input className="rounded-xl w-24" value={get("currency_symbol", "₹")} onChange={set("currency_symbol")} maxLength={3} />
+                                    </Row>
+                                </Section>
+                            )}
+
+                            {/* ── Data ──────────────────────────────────── */}
+                            {activeTab === "data" && (
+                                <Section title="Data & Backups" desc="Export or manage your clinic data.">
+                                    <div className="space-y-3">
+                                        {[
+                                            { label: "Export Patients (CSV)", desc: "Download all patient records", action: "Export" },
+                                            { label: "Export Sessions (CSV)", desc: "Download all session history", action: "Export" },
+                                            { label: "Export Staff (CSV)", desc: "Download staff directory", action: "Export" },
+                                            { label: "Full Data Backup", desc: "Download complete clinic backup as ZIP", action: "Download" },
+                                        ].map(item => (
+                                            <div key={item.label} className="flex items-center justify-between py-3.5 px-4 bg-muted/40 rounded-xl">
+                                                <div>
+                                                    <p className="text-sm font-medium">{item.label}</p>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                                                </div>
+                                                <Button size="sm" variant="outline" className="rounded-xl text-xs shrink-0">{item.action}</Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
+                                        <p className="text-sm font-semibold text-red-700">Danger Zone</p>
+                                        <p className="text-xs text-red-600">Permanently delete all clinic data. This action cannot be undone.</p>
+                                        <Button size="sm" className="rounded-xl bg-red-600 hover:bg-red-700 text-xs">Delete All Data</Button>
+                                    </div>
+                                </Section>
+                            )}
+                        </div>
+
+                        {/* Save footer */}
+                        {activeTab !== "data" && (
+                            <div className="px-6 py-4 border-t border-border/60 flex items-center justify-end gap-3">
+                                {saved && <span className="text-xs text-emerald-600 font-medium">Changes saved ✓</span>}
+                                <Button onClick={save} disabled={saving} className="rounded-xl gap-2">
+                                    {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> : <><Save className="w-4 h-4" />Save Settings</>}
+                                </Button>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
+        </div>
+    );
+}
+
+function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+    return (
+        <div className="space-y-5">
+            <div>
+                <h2 className="font-bold text-base">{title}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+            </div>
+            <div className="space-y-4">{children}</div>
+        </div>
+    );
+}
+
+function Row({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
+    return (
+        <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Icon className="w-3.5 h-3.5 text-muted-foreground" /> {label}
+            </label>
+            {children}
         </div>
     );
 }

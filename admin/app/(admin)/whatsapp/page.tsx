@@ -1,196 +1,284 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, MessageCircle, Clock, ChevronDown, ChevronUp, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useCallback } from "react";
+import {
+    Search, Pencil, MessageCircle, Clock, Zap, Copy, CheckCircle2,
+    RefreshCw, ToggleLeft, ToggleRight, X, Loader2, AlertCircle, Save,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { whatsappApi, WhatsAppTemplate } from "@/lib/api";
 
-const TRIGGERS = ["All", "Registration", "Appointment", "Post-Session", "Follow-Up", "Payment", "Emergency"];
-
-const MESSAGES = [
-    {
-        id: "w1", trigger: "Registration", name: "Welcome Message", timing: "Immediate on registration", status: "active",
-        preview: "Welcome to ProHuman Health! 🎉 We're so glad you've chosen us for your physiotherapy journey. Our clinic is located at [Clinic Address]. For queries, call us at [Phone]. Your first session is [Date] at [Time]. ✅",
-        variables: ["Patient Name", "Clinic Address", "Phone", "Date", "Time"],
-    },
-    {
-        id: "w2", trigger: "Appointment", name: "Appointment Confirmation", timing: "Immediately when booked", status: "active",
-        preview: "Hi [Patient Name]! Your appointment at ProHuman Health is confirmed for [Date] at [Time] with [Doctor Name]. Please arrive 10 minutes early. For directions or questions, call [Phone]. See you soon! 🙌",
-        variables: ["Patient Name", "Date", "Time", "Doctor Name", "Phone"],
-    },
-    {
-        id: "w3", trigger: "Appointment", name: "Appointment Reminder", timing: "24 hours before appointment", status: "active",
-        preview: "Reminder 🔔 Hi [Patient Name], your session at ProHuman Health is tomorrow — [Date] at [Time] with [Doctor Name]. Location: [Address]. Reply CONFIRM to confirm or CANCEL if you can't make it.",
-        variables: ["Patient Name", "Date", "Time", "Doctor Name", "Address"],
-    },
-    {
-        id: "w4", trigger: "Post-Session", name: "Post-Session Exercise Instructions", timing: "After session marked complete", status: "active",
-        preview: "Great work today, [Patient Name]! 💪 Here are your home exercises for this week:\n[Exercise List]\n📹 Video links: [Video URLs]\nRemember: consistency is key! Questions? Reach us at [Phone].",
-        variables: ["Patient Name", "Exercise List", "Video URLs", "Phone"],
-    },
-    {
-        id: "w5", trigger: "Follow-Up", name: "Week 1–4 Check-In (Weekly)", timing: "Every 7 days post-treatment", status: "active",
-        preview: "Hi [Patient Name]! 👋 It's been a week since your last session. How are your exercises going? Let us know if you have any pain or difficulty — we're here to help. Reply to this message anytime!",
-        variables: ["Patient Name"],
-    },
-    {
-        id: "w6", trigger: "Follow-Up", name: "Month 1–2 Check-In (Bi-Weekly)", timing: "Every 14 days (1–2 months post)", status: "active",
-        preview: "Hi [Patient Name]! A quick check-in from ProHuman Health. 🌟 Keep up those exercises — they make a real difference! If you feel ready for a re-evaluation, reply to book. You're doing great!",
-        variables: ["Patient Name"],
-    },
-    {
-        id: "w7", trigger: "Follow-Up", name: "Month 2–3 Check-In (Monthly)", timing: "Monthly (2–3 months post)", status: "active",
-        preview: "Hello [Patient Name]! It's been a while 🙏 How are you feeling? We'd love to hear about your progress. If you'd like a re-evaluation or have concerns, book a session at [Booking Link].",
-        variables: ["Patient Name", "Booking Link"],
-    },
-    {
-        id: "w8", trigger: "Payment", name: "Pending Payment Reminder", timing: "When payment is overdue", status: "active",
-        preview: "Hi [Patient Name], this is a gentle reminder that a payment of ₹[Amount] is pending for your session on [Date]. Please settle at your next visit or via [Payment Link]. For help, contact us at [Phone].",
-        variables: ["Patient Name", "Amount", "Date", "Payment Link", "Phone"],
-    },
-    {
-        id: "w9", trigger: "Appointment", name: "No-Show / Late Arrival", timing: "15+ min past appointment time", status: "active",
-        preview: "Hi [Patient Name], we noticed you missed your [Time] session today. We hope everything is okay! Would you like to reschedule? Reply with a preferred time or call [Phone]. Your health matters to us 💙",
-        variables: ["Patient Name", "Time", "Phone"],
-    },
-    {
-        id: "w10", trigger: "Emergency", name: "High-Risk Patient Alert", timing: "When patient reports worsening", status: "draft",
-        preview: "⚠️ ALERT for [Doctor Name]: Patient [Patient Name] has reported worsening symptoms on [Date]. Immediate consultation recommended. Please review their file and contact them at [Patient Phone].",
-        variables: ["Doctor Name", "Patient Name", "Date", "Patient Phone"],
-    },
-];
-
-const TRIGGER_COLORS: Record<string, string> = {
-    Registration: "bg-violet-100 text-violet-700",
-    Appointment: "bg-blue-100 text-blue-700",
-    "Post-Session": "bg-emerald-100 text-emerald-700",
-    "Follow-Up": "bg-amber-100 text-amber-700",
-    Payment: "bg-pink-100 text-pink-700",
-    Emergency: "bg-red-100 text-red-600",
+// ── Trigger meta ───────────────────────────────────────────────────────────────
+const TRIGGER_COLOR: Record<string, string> = {
+    registration: "bg-violet-100 text-violet-700",
+    appointment: "bg-blue-100 text-blue-700",
+    post_session: "bg-emerald-100 text-emerald-700",
+    follow_up: "bg-amber-100 text-amber-700",
+    payment: "bg-pink-100 text-pink-700",
+    emergency: "bg-red-100 text-red-600",
 };
 
-export default function WhatsAppPage() {
-    const [search, setSearch] = useState("");
-    const [trigger, setTrigger] = useState("All");
-    const [expanded, setExpanded] = useState<string | null>(null);
+function triggerLabel(t: string) {
+    return t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
 
-    const filtered = MESSAGES.filter((m) => {
-        const matchSearch = m.name.toLowerCase().includes(search.toLowerCase());
-        const matchTrigger = trigger === "All" || m.trigger === trigger;
-        return matchSearch && matchTrigger;
-    });
+function Skeleton({ className }: { className?: string }) {
+    return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
+
+// ── Edit Modal ─────────────────────────────────────────────────────────────────
+function EditModal({ template, onClose, onSaved }: {
+    template: WhatsAppTemplate; onClose: () => void; onSaved: (t: WhatsAppTemplate) => void;
+}) {
+    const [name, setName] = useState(template.name);
+    const [body, setBody] = useState(template.body);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    async function save() {
+        if (!name.trim()) { setError("Name is required"); return; }
+        if (!body.trim()) { setError("Message body is required"); return; }
+        setSaving(true); setError(null);
+        try {
+            const updated = await whatsappApi.update(template.id, { name: name.trim(), body: body.trim() });
+            onSaved(updated);
+            onClose();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Save failed");
+        } finally { setSaving(false); }
+    }
 
     return (
-        <div className="flex flex-col gap-4 p-4 md:p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
+                    <div>
+                        <h2 className="font-bold text-base">Edit Template</h2>
+                        <p className="text-xs text-muted-foreground capitalize">{triggerLabel(template.trigger)}</p>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                <div className="px-6 py-5 space-y-4">
+                    {error && (
+                        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
+                            <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                        </div>
+                    )}
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold">Template Name <span className="text-red-500">*</span></label>
+                        <Input className={cn("rounded-xl", !name.trim() && error && "border-red-400")}
+                            value={name} onChange={e => setName(e.target.value)} placeholder="Template name" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold">Message Body <span className="text-red-500">*</span></label>
+                        <textarea value={body} onChange={e => setBody(e.target.value)} rows={8}
+                            className={cn("w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring font-mono leading-relaxed",
+                                !body.trim() && error && "border-red-400")}
+                            placeholder="Use {{variable_name}} for dynamic fields" />
+                        <p className="text-[11px] text-muted-foreground">Use {"{{variable}}"} syntax for dynamic fields, e.g. {"{{patient_name}}"}</p>
+                    </div>
+                </div>
+                <div className="px-6 py-4 border-t border-border/60 flex justify-end gap-3">
+                    <Button variant="outline" className="rounded-xl" onClick={onClose} disabled={saving}>Cancel</Button>
+                    <Button className="rounded-xl gap-2" onClick={save} disabled={saving}>
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}Save
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+export default function WhatsAppPage() {
+    const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState("");
+    const [triggerFilter, setTriggerFilter] = useState("All");
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const [editing, setEditing] = useState<WhatsAppTemplate | null>(null);
+    const [copied, setCopied] = useState<string | null>(null);
+    const [toggling, setToggling] = useState<string | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { setTemplates(await whatsappApi.list()); }
+        catch { setTemplates([]); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    // Distinct triggers for tabs
+    const allTriggers = ["All", ...Array.from(new Set(templates.map(t => t.trigger)))];
+
+    const filtered = templates.filter(t => {
+        const matchesTrigger = triggerFilter === "All" || t.trigger === triggerFilter;
+        const matchesSearch = !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.body.toLowerCase().includes(search.toLowerCase());
+        return matchesTrigger && matchesSearch;
+    });
+
+    async function toggleActive(t: WhatsAppTemplate) {
+        setToggling(t.id);
+        try {
+            const updated = await whatsappApi.update(t.id, { is_active: !t.is_active });
+            setTemplates(prev => prev.map(x => x.id === t.id ? updated : x));
+        } catch { } finally { setToggling(null); }
+    }
+
+    function copyBody(body: string, id: string) {
+        navigator.clipboard.writeText(body).then(() => {
+            setCopied(id);
+            setTimeout(() => setCopied(null), 2000);
+        });
+    }
+
+    const activeCount = templates.filter(t => t.is_active).length;
+
+    return (
+        <div className="flex flex-col gap-4 p-5">
             {/* Header */}
             <div className="flex items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">WhatsApp Messages</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5 hidden sm:block">Manage automated message templates sent to patients at key triggers.</p>
+                    <h1 className="text-2xl font-bold tracking-tight">WhatsApp Messages</h1>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                        {templates.length} templates · {activeCount} active
+                    </p>
                 </div>
-                <Button size="sm" className="gap-1.5 rounded-xl shrink-0">
-                    <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Template</span>
-                </Button>
+                <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                    <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                </button>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                    { label: "Active Templates", value: MESSAGES.filter(m => m.status === "active").length, color: "text-emerald-600" },
-                    { label: "Draft Templates", value: MESSAGES.filter(m => m.status === "draft").length, color: "text-amber-600" },
-                    { label: "Trigger Types", value: TRIGGERS.length - 1, color: "text-blue-600" },
-                    { label: "Sent This Month", value: "284", color: "text-violet-600" },
-                ].map((s) => (
-                    <div key={s.label} className="bg-white rounded-2xl p-4 space-y-1">
-                        <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
-                        <p className="text-xs text-muted-foreground">{s.label}</p>
+                    { label: "Total Templates", value: templates.length, color: "text-foreground" },
+                    { label: "Active", value: activeCount, color: "text-emerald-600" },
+                    { label: "Inactive", value: templates.length - activeCount, color: "text-muted-foreground" },
+                    { label: "Trigger Types", value: allTriggers.length - 1, color: "text-blue-600" },
+                ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white rounded-2xl border border-border/50 p-4">
+                        <p className="text-xs text-muted-foreground">{label}</p>
+                        <p className={cn("text-2xl font-bold mt-1", color)}>{value}</p>
                     </div>
                 ))}
             </div>
 
-            {/* Search + Trigger filter */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="relative w-full sm:w-72">
+            {/* Search + Filters */}
+            <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input placeholder="Search templates..." className="pl-9 rounded-xl bg-white" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    <Input placeholder="Search templates…" className="pl-9 rounded-xl bg-white" value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
-                <div className="flex items-center gap-1 bg-white rounded-xl p-1 overflow-x-auto w-full sm:w-auto">
-                    {TRIGGERS.map((t) => (
-                        <button key={t} onClick={() => setTrigger(t)} className={cn("px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap", trigger === t ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
-                            {t}
+                <div className="flex items-center gap-1 bg-white rounded-xl p-1 flex-wrap">
+                    {allTriggers.map(t => (
+                        <button key={t} onClick={() => setTriggerFilter(t)}
+                            className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize",
+                                triggerFilter === t ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
+                            {t === "All" ? "All" : triggerLabel(t)}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Template list */}
+            {/* Templates list */}
             <div className="space-y-2">
-                {filtered.map((m) => {
-                    const isOpen = expanded === m.id;
-                    return (
-                        <div key={m.id} className="bg-white rounded-2xl overflow-hidden">
-                            <div
-                                className="flex items-center gap-4 px-4 md:px-5 py-3.5 cursor-pointer hover:bg-muted/20 transition-colors"
-                                onClick={() => setExpanded(isOpen ? null : m.id)}
-                            >
-                                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", TRIGGER_COLORS[m.trigger] ?? "bg-muted text-muted-foreground")}>
-                                    <MessageCircle className="w-4 h-4" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <p className="font-semibold text-sm">{m.name}</p>
-                                        <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 font-medium capitalize", m.status === "active" ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
-                                            {m.status}
-                                        </Badge>
-                                    </div>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                        <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-                                        <p className="text-xs text-muted-foreground truncate">{m.timing}</p>
-                                    </div>
-                                </div>
-                                <div className="hidden sm:flex items-center gap-2 shrink-0">
-                                    <span className={cn("text-[11px] font-medium px-2.5 py-1 rounded-full", TRIGGER_COLORS[m.trigger] ?? "bg-muted text-muted-foreground")}>
-                                        {m.trigger}
+                {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16" />)
+                ) : filtered.length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-border/50 p-12 text-center text-sm text-muted-foreground">
+                        {search || triggerFilter !== "All" ? "No templates match your filters." : "No WhatsApp templates found."}
+                    </div>
+                ) : filtered.map(t => (
+                    <div key={t.id} className={cn("bg-white rounded-2xl border transition-all overflow-hidden",
+                        t.is_active ? "border-border/50" : "border-border/30 opacity-60")}>
+                        <div className="flex items-center gap-4 px-5 py-4">
+                            {/* Icon */}
+                            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+                                t.is_active ? "bg-[#25D366]/10" : "bg-muted")}>
+                                <MessageCircle className={cn("w-4 h-4", t.is_active ? "text-[#25D366]" : "text-muted-foreground")} />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm">{t.name}</span>
+                                    <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full capitalize",
+                                        TRIGGER_COLOR[t.trigger] ?? "bg-muted text-muted-foreground")}>
+                                        {triggerLabel(t.trigger)}
                                     </span>
-                                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                        <Zap className="w-3 h-3" />
-                                        {m.variables.length} vars
-                                    </div>
+                                    {!t.is_active && (
+                                        <Badge variant="outline" className="text-[10px] rounded-full text-muted-foreground border-muted-foreground/20">Inactive</Badge>
+                                    )}
                                 </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                    <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted" onClick={(ev) => { ev.stopPropagation(); }}><Pencil className="w-3.5 h-3.5" /></button>
-                                    <button className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50" onClick={(ev) => { ev.stopPropagation(); }}><Trash2 className="w-3.5 h-3.5" /></button>
-                                    {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground ml-1" /> : <ChevronDown className="w-4 h-4 text-muted-foreground ml-1" />}
+                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{t.body.slice(0, 100)}…</p>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={() => copyBody(t.body, t.id)}
+                                    className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Copy body">
+                                    {copied === t.id ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                                </button>
+                                <button onClick={() => setEditing(t)}
+                                    className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Edit">
+                                    <Pencil className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => toggleActive(t)} disabled={toggling === t.id}
+                                    className={cn("p-2 rounded-xl transition-colors", t.is_active
+                                        ? "text-emerald-600 hover:bg-emerald-50"
+                                        : "text-muted-foreground hover:bg-muted")}
+                                    title={t.is_active ? "Deactivate" : "Activate"}>
+                                    {toggling === t.id
+                                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                                        : t.is_active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                                </button>
+                                <button onClick={() => setExpanded(expanded === t.id ? null : t.id)}
+                                    className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Preview">
+                                    <Zap className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Expanded preview */}
+                        {expanded === t.id && (
+                            <div className="px-5 pb-5 pt-0 border-t border-border/40">
+                                <div className="mt-3 bg-[#ECF0F1] rounded-2xl p-4 max-w-sm space-y-2">
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                        <div className="w-2 h-2 rounded-full bg-[#25D366]" />
+                                        <span className="text-[11px] font-semibold text-muted-foreground">Message Preview</span>
+                                    </div>
+                                    <div className="bg-white rounded-xl rounded-tl-none p-3 text-xs leading-relaxed text-foreground shadow-sm whitespace-pre-wrap font-sans">
+                                        {t.body}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Clock className="w-3 h-3 text-muted-foreground" />
+                                        <span className="text-[10px] text-muted-foreground">
+                                            Updated {new Date(t.updated_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                            {t.updated_by_name ? ` by ${t.updated_by_name}` : ""}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            {isOpen && (
-                                <div className="border-t border-border/60 px-4 md:px-5 py-4 bg-muted/20 space-y-3">
-                                    <div>
-                                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Message Preview</p>
-                                        <div className="bg-white rounded-xl p-4 text-sm text-muted-foreground leading-relaxed whitespace-pre-line border border-border/60">
-                                            {m.preview}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Variables Used</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {m.variables.map((v) => (
-                                                <span key={v} className="text-[11px] bg-foreground/10 text-foreground px-2 py-0.5 rounded-full font-mono font-medium">[{v}]</span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" className="rounded-xl text-xs gap-1.5"><Pencil className="w-3 h-3" /> Edit Template</Button>
-                                        <Button size="sm" className="rounded-xl text-xs">Send Test</Button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+                        )}
+                    </div>
+                ))}
             </div>
+
+            {editing && (
+                <EditModal
+                    template={editing}
+                    onClose={() => setEditing(null)}
+                    onSaved={updated => setTemplates(prev => prev.map(t => t.id === updated.id ? updated : t))}
+                />
+            )}
         </div>
     );
 }
