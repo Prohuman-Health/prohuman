@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prohuman_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: prohuman
+      POSTGRES_PASSWORD: prohuman_secret
+      POSTGRES_DB: prohuman_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prohuman -d prohuman_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+    name: prohuman_pgdata

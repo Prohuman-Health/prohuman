@@ -9,11 +9,15 @@ CREATE TABLE IF NOT EXISTS settings (
   description TEXT,
   updated_by  UUID REFERENCES staff(id) ON DELETE SET NULL,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (branch_id, key),
-  UNIQUE (key) WHERE branch_id IS NULL  -- enforce unique global keys
+  UNIQUE (branch_id, key)
 );
 
-CREATE INDEX idx_settings_branch ON settings(branch_id);
+-- Partial index enforces that global keys (branch_id IS NULL) are also unique
+CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_global_key
+  ON settings(key) WHERE branch_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_settings_branch ON settings(branch_id);
+
 
 -- -------------------------------------------------------
 -- Default global settings (inserted once, admin can update)

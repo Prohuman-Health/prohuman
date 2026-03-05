@@ -4,7 +4,7 @@
   "description": "ProHuman Health Scheduling — Express + PostgreSQL API",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --clear-screen=false src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "db:migrate": "node -r tsx/cjs src/db/migrate.ts",
@@ -19,9 +19,12 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
+    "google-auth-library": "^10.6.1",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
     "pg": "^8.13.3",
     "uuid": "^11.1.0",
     "zod": "^3.24.2"
