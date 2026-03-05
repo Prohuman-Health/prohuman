@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { auth as api, onboarding } from "@/lib/api";
 import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
-export default function LoginPage() {
+// Inner component — uses useSearchParams so must live inside <Suspense>
+function LoginInner() {
     const router = useRouter();
     const params = useSearchParams();
     const { user, loading, login } = useAuth();
@@ -217,5 +218,17 @@ export default function LoginPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="h-screen flex items-center justify-center bg-[#0A0E28]">
+                <Loader2 className="w-8 h-8 text-[#2493A2] animate-spin" />
+            </div>
+        }>
+            <LoginInner />
+        </Suspense>
     );
 }
