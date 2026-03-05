@@ -4,7 +4,9 @@ import cors from "cors";
 import compression from "compression";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
+import passport from "passport";
 import { env } from "./config/env";
+import "./config/passport";          // register Google strategy
 import routes from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 
@@ -16,6 +18,7 @@ app.use(cors({ origin: env.CORS_ORIGIN.split(","), credentials: true }));
 app.use(compression());
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());        // no session — JWT only
 
 // ── Logging ──────────────────────────────────────────────────────────────────
 if (env.NODE_ENV !== "test") {

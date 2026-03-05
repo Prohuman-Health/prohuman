@@ -1,6 +1,7 @@
 /** Shared TypeScript types matching the DB schema */
 
-export type Role = "admin" | "receptionist" | "doctor";
+export type Role = "admin" | "receptionist" | "doctor" | "physiotherapist" | "massager" | "fitness_trainer";
+
 export type Gender = "Male" | "Female" | "Other";
 export type SessionStatus =
   | "pending"
@@ -329,6 +330,8 @@ export interface JwtPayload {
 /** Express Request extension */
 declare global {
   namespace Express {
+    // Make Passport's req.user compatible with our JWT payload shape
+    interface User extends JwtPayload { }
     interface Request {
       user?: JwtPayload;
     }

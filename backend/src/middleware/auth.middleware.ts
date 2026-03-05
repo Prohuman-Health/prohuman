@@ -26,3 +26,6 @@ export function authorize(...roles: Role[]) {
     next();
   };
 }
+
+/** Alias for authorize — restrict access to one or more roles */
+export const requireRole = authorize;

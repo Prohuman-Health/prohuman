@@ -1,6 +1,7 @@
 import app from "./app";
 import { pool } from "./config/db";
 import { env } from "./config/env";
+import net from "net";
 
 async function start() {
   // Verify DB connection
@@ -14,10 +15,25 @@ async function start() {
     process.exit(1);
   }
 
-  const server = app.listen(env.PORT, () => {
-    console.log(`🚀 Server running on port ${env.PORT} [${env.NODE_ENV}]`);
-    console.log(`   API: http://localhost:${env.PORT}/api/v1`);
-  });
+  const bindPort = (retries = 3, delay = 1500): Promise<ReturnType<typeof app.listen>> =>
+    new Promise((resolve, reject) => {
+      const server = app.listen(env.PORT, () => {
+        console.log(`🚀 Server running on port ${env.PORT} [${env.NODE_ENV}]`);
+        console.log(`   API: http://localhost:${env.PORT}/api/v1`);
+        resolve(server);
+      });
+      server.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EADDRINUSE" && retries > 0) {
+          console.log(`⚠️  Port ${env.PORT} in use, retrying in ${delay}ms… (${retries} attempts left)`);
+          server.close();
+          setTimeout(() => bindPort(retries - 1, delay).then(resolve).catch(reject), delay);
+        } else {
+          reject(err);
+        }
+      });
+    });
+
+  const server = await bindPort();
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
@@ -30,7 +46,7 @@ async function start() {
   };
 
   process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT",  () => shutdown("SIGINT"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
   process.on("unhandledRejection", (reason) => {
     console.error("Unhandled rejection:", reason);
