@@ -9,6 +9,7 @@ import { usePatients } from "@/lib/contexts/patients-context";
 import type { Patient } from "@/lib/api";
 import { NewPatientModal } from "@/components/modals/new-patient-modal";
 import { PatientHistoryModal } from "@/components/modals/patient-history-modal";
+import { EditPatientModal } from "@/components/modals/edit-patient-modal";
 
 const AVATAR_COLORS = ["bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700", "bg-emerald-100 text-emerald-700", "bg-amber-100 text-amber-700", "bg-pink-100 text-pink-700", "bg-cyan-100 text-cyan-700"];
 
@@ -21,6 +22,7 @@ export default function PatientsPage() {
     const [selected, setSelected] = useState<Patient | null>(null);
     const [newPatientOpen, setNewPatientOpen] = useState(false);
     const [historyPatient, setHistoryPatient] = useState<Patient | null>(null);
+    const [editPatient, setEditPatient] = useState<Patient | null>(null);
     const LIMIT = 20;
 
     const filtered = patients.filter(p =>
@@ -173,7 +175,7 @@ export default function PatientsPage() {
                         )}
                         <div className="space-y-2">
                             <Button size="sm" className="w-full rounded-xl text-xs" onClick={() => setHistoryPatient(selected)}>View Full History</Button>
-                            <Button variant="outline" size="sm" className="w-full rounded-xl text-xs">Edit Patient</Button>
+                            <Button variant="outline" size="sm" className="w-full rounded-xl text-xs" onClick={() => setEditPatient(selected)}>Edit Patient</Button>
                         </div>
                     </div>
                 </div>
@@ -181,6 +183,13 @@ export default function PatientsPage() {
             {/* New Patient Modal */}
             <NewPatientModal open={newPatientOpen} onClose={() => setNewPatientOpen(false)} />
             <PatientHistoryModal patient={historyPatient} onClose={() => setHistoryPatient(null)} />
+            <EditPatientModal
+                patient={editPatient}
+                onClose={(updated) => {
+                    setEditPatient(null);
+                    if (updated) setSelected(updated); // refresh the side panel with new data
+                }}
+            />
         </div>
     );
 }
