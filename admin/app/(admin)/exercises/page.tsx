@@ -7,15 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useExercises } from "@/lib/contexts/catalog-context";
+import type { Exercise } from "@/lib/api";
+import { exercisesApi } from "@/lib/api";
 import { NewExerciseModal } from "@/components/modals/new-exercise-modal";
+import { EditExerciseModal } from "@/components/modals/edit-exercise-modal";
+import { DeleteConfirmModal } from "@/components/modals/algorithm-modals";
 
 const CATEGORY_STYLE: Record<string, string> = {
-    Strength: "bg-violet-100 text-violet-700",
-    Flexibility: "bg-blue-100 text-blue-700",
-    Balance: "bg-pink-100 text-pink-700",
+    "Lower Limb": "bg-violet-100 text-violet-700",
+    "Upper Limb": "bg-blue-100 text-blue-700",
+    "Balance and Proprioception": "bg-pink-100 text-pink-700",
     Cardio: "bg-orange-100 text-orange-700",
     Neurological: "bg-cyan-100 text-cyan-700",
-    "Post-Surgical": "bg-rose-100 text-rose-700",
+    Spine: "bg-rose-100 text-rose-700",
+    Core: "bg-emerald-100 text-emerald-700",
+    Other: "bg-muted text-muted-foreground",
 };
 
 function Skeleton({ className }: { className?: string }) {
@@ -25,7 +31,11 @@ function Skeleton({ className }: { className?: string }) {
 export default function ExercisesPage() {
     const { exercises, total, loading, search, category, categories, setSearch, setCategory, refresh } = useExercises();
     const [expanded, setExpanded] = useState<string | null>(null);
-    const [showAddModal, setShowAddModal] = useState(false);
+
+    // Modal state
+    const [showAdd, setShowAdd] = useState(false);
+    const [editing, setEditing] = useState<Exercise | null>(null);
+    const [deleting, setDeleting] = useState<Exercise | null>(null);
 
     return (
         <>
@@ -40,7 +50,7 @@ export default function ExercisesPage() {
                         <button onClick={refresh} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
                             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
                         </button>
-                        <Button size="sm" className="gap-1.5 rounded-xl shrink-0" onClick={() => setShowAddModal(true)}>
+                        <Button size="sm" className="gap-1.5 rounded-xl shrink-0" onClick={() => setShowAdd(true)}>
                             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Exercise</span>
                         </Button>
                     </div>
@@ -107,10 +117,16 @@ export default function ExercisesPage() {
                                     </div>
 
                                     <div className="flex items-center gap-1 shrink-0">
-                                        <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
-                                            onClick={ev => ev.stopPropagation()}><Pencil className="w-3.5 h-3.5" /></button>
-                                        <button className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-                                            onClick={ev => ev.stopPropagation()}><Trash2 className="w-3.5 h-3.5" /></button>
+                                        <button
+                                            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
+                                            onClick={ev => { ev.stopPropagation(); setEditing(e); }}>
+                                            <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                            className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                                            onClick={ev => { ev.stopPropagation(); setDeleting(e); }}>
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
                                         {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground ml-1" /> : <ChevronDown className="w-4 h-4 text-muted-foreground ml-1" />}
                                     </div>
                                 </div>
@@ -138,7 +154,22 @@ export default function ExercisesPage() {
                 </div>
             </div>
 
-            <NewExerciseModal open={showAddModal} onClose={() => setShowAddModal(false)} />
+            {/* Modals */}
+            <NewExerciseModal open={showAdd} onClose={() => setShowAdd(false)} />
+
+            {editing && (
+                <EditExerciseModal open={!!editing} onClose={() => setEditing(null)} exercise={editing} />
+            )}
+
+            {deleting && (
+                <DeleteConfirmModal
+                    open={!!deleting}
+                    onClose={() => setDeleting(null)}
+                    title="Deactivate Exercise?"
+                    description={`"${deleting.name}" will be marked inactive and hidden from the library. This can be reversed by editing.`}
+                    onConfirm={async () => { await exercisesApi.delete(deleting.id); await refresh(); }}
+                />
+            )}
         </>
     );
 }
