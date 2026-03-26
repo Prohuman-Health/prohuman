@@ -389,12 +389,14 @@ export default function SessionsPage() {
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [selected, setSelected] = useState<Session | null>(null);
     const [formSession, setFormSession] = useState<Session | null>(null);
+    const [activeOpen, setActiveOpen] = useState(true);
+    const [completedOpen, setCompletedOpen] = useState(true);
     const LIMIT = 25;
 
     // After attendance is marked, refresh and update selected panel
     function handleAttended() {
         refresh();
-        setSelected(null); // close detail panel to force re-read of fresh data
+        setSelected(null);
     }
 
     const filtered = sessions.filter(s =>
@@ -404,10 +406,117 @@ export default function SessionsPage() {
         s.session_type_name.toLowerCase().includes(search.toLowerCase())
     );
 
+    // ── Split into two groups ──────────────────────────────────────────────────
+    const TERMINAL = new Set(["completed", "cancelled", "no-show", "late-cancellation"]);
+    const activeSessions   = filtered.filter(s => !TERMINAL.has(s.status));
+    const terminalSessions = filtered.filter(s => TERMINAL.has(s.status));
+
+    // ── Shared table row renderer ──────────────────────────────────────────────
+    function SessionRow({ s }: { s: Session }) {
+        const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
+        const dt = new Date(s.scheduled_at);
+        const isSelected = selected?.id === s.id;
+        return (
+            <tr
+                onClick={() => setSelected(isSelected ? null : s)}
+                className={cn("border-b border-border/60 cursor-pointer transition-colors hover:bg-muted/30",
+                    isSelected && "bg-muted/50")}
+            >
+                <td className="px-5 py-3.5 font-medium whitespace-nowrap">
+                    {s.patient_name}
+                    <span className="ml-1.5 text-[10px] text-muted-foreground font-mono">{s.patient_code}</span>
+                </td>
+                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">Dr. {s.doctor_name}</td>
+                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.session_type_name}</td>
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                    <p className="text-xs font-medium">{dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                    <p className="text-[11px] text-muted-foreground font-mono">{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
+                </td>
+                <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.duration_minutes} min</td>
+                <td className="px-5 py-3.5">
+                    <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium whitespace-nowrap", cfg.cls)}>{cfg.label}</Badge>
+                </td>
+                <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={e => { e.stopPropagation(); setFormSession(s); }}
+                            className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                            title="Open session form">
+                            <ClipboardList className="w-3.5 h-3.5" /> Form
+                        </button>
+                        {!TERMINAL.has(s.status) && (
+                            <button
+                                onClick={async e => { e.stopPropagation(); await sessionsApi.markAttendance(s.id, "attended"); refresh(); }}
+                                className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
+                                title="Mark as completed">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Done
+                            </button>
+                        )}
+                    </div>
+                </td>
+            </tr>
+        );
+    }
+
+    // ── Table wrapper ──────────────────────────────────────────────────────────
+    function SessionTable({
+        label, accent, icon: Icon, rows, open, onToggle, emptyText,
+    }: {
+        label: string; accent: string; icon: React.ElementType;
+        rows: Session[]; open: boolean; onToggle: () => void; emptyText: string;
+    }) {
+        return (
+            <div className="bg-white rounded-2xl border border-border/50 overflow-hidden">
+                <button
+                    onClick={onToggle}
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/30 transition-colors"
+                >
+                    <div className="flex items-center gap-2.5">
+                        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", accent)}>
+                            <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="font-semibold text-sm">{label}</span>
+                        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full tabular-nums">
+                            {rows.length}
+                        </span>
+                    </div>
+                    <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+                </button>
+
+                {open && (
+                    <div className="overflow-x-auto border-t border-border/60">
+                        <table className="w-full text-sm min-w-[700px]">
+                            <thead className="border-b border-border/60 bg-muted/30">
+                                <tr>
+                                    {["Patient", "Doctor", "Session Type", "Date & Time", "Duration", "Status", "Actions"].map(h => (
+                                        <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    Array.from({ length: 5 }).map((_, i) => (
+                                        <tr key={i} className="border-b border-border/60">
+                                            {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-5 py-3.5"><Skeleton className="h-4 w-full" /></td>)}
+                                        </tr>
+                                    ))
+                                ) : rows.length === 0 ? (
+                                    <tr><td colSpan={7} className="text-center py-10 text-muted-foreground text-sm">{emptyText}</td></tr>
+                                ) : (
+                                    rows.map(s => <SessionRow key={s.id} s={s} />)
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className="flex h-full gap-4 p-5 overflow-hidden">
             {/* Main column */}
-            <div className="flex flex-col flex-1 min-w-0 gap-4">
+            <div className="flex flex-col flex-1 min-w-0 gap-4 overflow-y-auto">
                 <div className="flex items-start justify-between gap-3">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">Sessions</h1>
@@ -440,75 +549,27 @@ export default function SessionsPage() {
                     <span className="text-xs text-muted-foreground sm:ml-auto">{filtered.length} shown</span>
                 </div>
 
-                <div className="bg-white rounded-2xl overflow-hidden flex-1 border border-border/50">
-                    <div className="overflow-x-auto h-full">
-                        <table className="w-full text-sm min-w-[700px]">
-                            <thead className="border-b border-border/60 sticky top-0 bg-white z-10">
-                                <tr>
-                                    {["Patient", "Doctor", "Session Type", "Date & Time", "Duration", "Status", "Form"].map(h => (
-                                        <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loading ? (
-                                    Array.from({ length: 8 }).map((_, i) => (
-                                        <tr key={i} className="border-b border-border/60">
-                                            {Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-5 py-3.5"><Skeleton className="h-4 w-full" /></td>)}
-                                        </tr>
-                                    ))
-                                ) : filtered.length === 0 ? (
-                                    <tr><td colSpan={7} className="text-center py-16 text-muted-foreground text-sm">
-                                        {search ? "No sessions match your search" : "No sessions found"}
-                                    </td></tr>
-                                ) : filtered.map(s => {
-                                    const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
-                                    const dt = new Date(s.scheduled_at);
-                                    const isSelected = selected?.id === s.id;
-                                    return (
-                                        <tr key={s.id}
-                                            onClick={() => setSelected(isSelected ? null : s)}
-                                            className={cn("border-b border-border/60 cursor-pointer transition-colors hover:bg-muted/30",
-                                                isSelected && "bg-muted/50")}>
-                                            <td className="px-5 py-3.5 font-medium whitespace-nowrap">
-                                                {s.patient_name}
-                                                <span className="ml-1.5 text-[10px] text-muted-foreground font-mono">{s.patient_code}</span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">Dr. {s.doctor_name}</td>
-                                            <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.session_type_name}</td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
-                                                <p className="text-xs font-medium">{dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
-                                                <p className="text-[11px] text-muted-foreground font-mono">{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-muted-foreground text-xs">{s.duration_minutes} min</td>
-                                            <td className="px-5 py-3.5">
-                                                <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium whitespace-nowrap", cfg.cls)}>{cfg.label}</Badge>
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={e => { e.stopPropagation(); setFormSession(s); }}
-                                                        className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                                                        title="Open session form">
-                                                        <ClipboardList className="w-3.5 h-3.5" /> Form
-                                                    </button>
-                                                    {!["completed", "cancelled", "no-show", "late-cancellation"].includes(s.status) && (
-                                                        <button
-                                                            onClick={async e => { e.stopPropagation(); await sessionsApi.markAttendance(s.id, "attended"); refresh(); }}
-                                                            className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
-                                                            title="Mark as completed">
-                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Done
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                {/* ── Active / In-Progress sessions ── */}
+                <SessionTable
+                    label="Active Sessions"
+                    accent="bg-amber-100 text-amber-700"
+                    icon={Clock}
+                    rows={activeSessions}
+                    open={activeOpen}
+                    onToggle={() => setActiveOpen(v => !v)}
+                    emptyText={search ? "No active sessions match your search" : "No active sessions"}
+                />
+
+                {/* ── Completed / Terminal sessions ── */}
+                <SessionTable
+                    label="Completed & Closed"
+                    accent="bg-emerald-100 text-emerald-700"
+                    icon={CheckCircle2}
+                    rows={terminalSessions}
+                    open={completedOpen}
+                    onToggle={() => setCompletedOpen(v => !v)}
+                    emptyText={search ? "No completed sessions match your search" : "No completed sessions yet"}
+                />
 
                 {total > LIMIT && (
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
