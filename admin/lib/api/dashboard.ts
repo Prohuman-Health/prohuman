@@ -5,6 +5,7 @@ export interface DashboardStats {
         total_patients: number; active_doctors: number; session_types: number;
         sessions_this_month: number; sessions_today: number;
         waitlist_count: number; unassigned_forms: number;
+        new_patients: number; repeat_patients: number;
     };
     weekly_sessions: { dow: number; count: number }[];
     session_status: {

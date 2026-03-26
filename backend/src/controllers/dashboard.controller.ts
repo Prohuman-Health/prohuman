@@ -28,6 +28,7 @@ export const getDashboardStats = asyncHandler(async (_req: Request, res: Respons
         staffList,
         waitlistCount,
         unassignedForms,
+        patientSplit,
     ] = await Promise.all([
         // Total active patients
         query<{ count: string }>("SELECT COUNT(*) FROM patients WHERE is_active = TRUE"),
@@ -97,6 +98,22 @@ export const getDashboardStats = asyncHandler(async (_req: Request, res: Respons
 
         // Session types without a form assigned
         query<{ count: string }>("SELECT COUNT(*) FROM session_types WHERE is_active = TRUE AND form_id IS NULL"),
+
+        // New vs repeat patients
+        // new    = active patients who have exactly 1 session in total
+        // repeat = active patients who have more than 1 session in total
+        query<{ new_patients: string; repeat_patients: string }>(`
+            SELECT
+                COUNT(*) FILTER (WHERE session_count = 1) AS new_patients,
+                COUNT(*) FILTER (WHERE session_count > 1)  AS repeat_patients
+            FROM (
+                SELECT p.id, COUNT(s.id) AS session_count
+                FROM patients p
+                LEFT JOIN sessions s ON s.patient_id = p.id
+                WHERE p.is_active = TRUE
+                GROUP BY p.id
+            ) sub
+        `),
     ]);
 
     // ── Build weekly array (Sun=0 … Sat=6) ───────────────────────────────────
@@ -122,6 +139,8 @@ export const getDashboardStats = asyncHandler(async (_req: Request, res: Respons
             sessions_today: parseInt(todaySessions.rows[0]?.count ?? "0"),
             waitlist_count: parseInt(waitlistCount.rows[0]?.count ?? "0"),
             unassigned_forms: parseInt(unassignedForms.rows[0]?.count ?? "0"),
+            new_patients: parseInt(patientSplit.rows[0]?.new_patients ?? "0"),
+            repeat_patients: parseInt(patientSplit.rows[0]?.repeat_patients ?? "0"),
         },
         weekly_sessions: weeklyData,
         session_status: {

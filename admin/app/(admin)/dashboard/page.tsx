@@ -1,51 +1,60 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
-    Plus, ArrowUpRight, TrendingUp, CalendarDays,
-    Users, Stethoscope, Layers, Activity, AlertTriangle, Clock,
-    RefreshCw,
+    Plus, ArrowUpRight, CalendarDays,
+    Users, Stethoscope, AlertTriangle,
+    RefreshCw, CheckCircle2, XCircle, Clock, FileText, FileX,
+    ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { dashboard, DashboardStats } from "@/lib/api";
+import { dashboard, DashboardStats, sessionsApi as sessions, Session } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const ROLE_COLORS: Record<string, string> = {
-    admin: "bg-violet-100 text-violet-700",
-    receptionist: "bg-blue-100 text-blue-700",
-    physiotherapist: "bg-emerald-100 text-emerald-700",
-    massager: "bg-amber-100 text-amber-700",
-    fitness_trainer: "bg-orange-100 text-orange-700",
-    doctor: "bg-teal-100 text-teal-700",
-};
-
+// ── Helpers ────────────────────────────────────────────────────────────────────
 function initials(name: string) {
     return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
-
-function timeAgo(iso: string) {
-    const diff = Date.now() - new Date(iso).getTime();
-    const d = Math.floor(diff / 86400000);
-    if (d === 0) return "Today";
-    if (d === 1) return "Yesterday";
-    return `${d} days ago`;
-}
-
 function formatTime(iso: string) {
     return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+}
+function formatFullDate(iso: string) {
+    return new Date(iso).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
-// ── Skeleton shimmer ──────────────────────────────────────────────────────────
+// ── Skeleton shimmer ───────────────────────────────────────────────────────────
 function Skeleton({ className }: { className?: string }) {
     return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
 }
+
+// ── Status badge ───────────────────────────────────────────────────────────────
+const STATUS_STYLES: Record<string, string> = {
+    pending:    "bg-blue-50 text-blue-600 border-blue-100",
+    scheduled:  "bg-blue-50 text-blue-600 border-blue-100",
+    completed:  "bg-emerald-50 text-emerald-600 border-emerald-100",
+    cancelled:  "bg-red-50 text-red-500 border-red-100",
+    no_show:    "bg-amber-50 text-amber-600 border-amber-100",
+};
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+    pending:    <Clock className="w-3 h-3" />,
+    scheduled:  <Clock className="w-3 h-3" />,
+    completed:  <CheckCircle2 className="w-3 h-3" />,
+    cancelled:  <XCircle className="w-3 h-3" />,
+    no_show:    <AlertTriangle className="w-3 h-3" />,
+};
+
+type Period = "daily" | "weekly" | "monthly";
+
+// ── Session-type colour palette ────────────────────────────────────────────────
+const TYPE_COLORS = [
+    "#2493A2", "#7C3AED", "#F59E0B", "#10B981",
+    "#EF4444", "#3B82F6", "#EC4899", "#6366F1",
+];
 
 export default function DashboardPage() {
     const { user } = useAuth();
@@ -54,7 +63,13 @@ export default function DashboardPage() {
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [sessionOpen, setSessionOpen] = useState(false);
+    const [period, setPeriod] = useState<Period>("daily");
 
+    // Upcoming sessions
+    const [upcoming, setUpcoming] = useState<Session[]>([]);
+    const [upLoading, setUpLoading] = useState(true);
+
+    // ── Load dashboard stats ───────────────────────────────────────────────────
     const load = async (silent = false) => {
         if (!silent) setLoading(true);
         else setRefreshing(true);
@@ -70,72 +85,101 @@ export default function DashboardPage() {
         }
     };
 
-    useEffect(() => { load(); }, []);
+    // ── Load upcoming sessions ─────────────────────────────────────────────────
+    const loadUpcoming = async (p: Period) => {
+        setUpLoading(true);
+        try {
+            const now = new Date();
+            const from = now.toISOString();
+            let to: Date;
+            if (p === "daily")   { to = new Date(now); to.setDate(to.getDate() + 1); }
+            else if (p === "weekly") { to = new Date(now); to.setDate(to.getDate() + 7); }
+            else                 { to = new Date(now); to.setMonth(to.getMonth() + 1); }
 
-    // Derived
-    const maxWeekly = data ? Math.max(...data.weekly_sessions.map(d => d.count), 1) : 1;
-    const statusTotal = Math.max(data?.session_status.total ?? 0, 1);
-    const completedPct = data ? Math.round((data.session_status.completed / statusTotal) * 100) : 0;
-    const circumference = 2 * Math.PI * 54;
-    const offset = isFinite(completedPct) ? circumference - (completedPct / 100) * circumference : circumference;
-
-    const greeting = () => {
-        const h = new Date().getHours();
-        if (h < 12) return "Good morning";
-        if (h < 17) return "Good afternoon";
-        return "Good evening";
+            const res = await sessions.list({
+                status: "pending",
+                from,
+                to: to.toISOString(),
+                limit: "50",
+                sort: "asc",
+            });
+            setUpcoming(res.sessions ?? []);
+        } catch {
+            setUpcoming([]);
+        } finally {
+            setUpLoading(false);
+        }
     };
 
-    // ── Stat card definitions ─────────────────────────────────────────────────
-    const STATS = data ? [
-        {
-            label: "Total Patients",
-            value: data.stats.total_patients,
-            sub: "Active records",
-            icon: Users,
-            filled: true,
-        },
-        {
-            label: "Active Doctors",
-            value: data.stats.active_doctors,
-            sub: "On staff",
-            icon: Stethoscope,
-            filled: false,
-        },
-        {
-            label: "Sessions This Month",
-            value: data.stats.sessions_this_month,
-            sub: `${data.stats.sessions_today} today`,
-            icon: CalendarDays,
-            filled: false,
-        },
-        {
-            label: "Session Types",
-            value: data.stats.session_types,
-            sub: data.stats.unassigned_forms > 0
-                ? `${data.stats.unassigned_forms} without form`
-                : "All forms assigned",
-            icon: Layers,
-            filled: false,
-        },
-    ] : null;
+    useEffect(() => { load(); }, []);
+    useEffect(() => { loadUpcoming(period); }, [period]);
+
+    // ── Derived: patient breakdown (new vs repeat, from recent_patients proxy) ─
+    // We derive a split from session_status as a proxy:
+    // new patients = total_patients - (sessions with repeat patients, approximated)
+    // Real breakdown would need a dedicated endpoint; we show new/active split here.
+    const totalPatients = data?.stats.total_patients ?? 0;
+    const totalSessions = data?.stats.sessions_this_month ?? 0;
+
+    // Session type breakdown from session_status
+    const sessionBreakdown = useMemo(() => {
+        if (!data) return [];
+        const { completed, scheduled, cancelled, no_show } = data.session_status;
+        return [
+            { label: "Completed", count: completed, color: TYPE_COLORS[1] },
+            { label: "Scheduled", count: scheduled, color: TYPE_COLORS[0] },
+            { label: "Cancelled", count: cancelled, color: TYPE_COLORS[4] },
+            { label: "No-Show",   count: no_show,   color: TYPE_COLORS[3] },
+        ].filter(i => i.count > 0);
+    }, [data]);
+
+    const sessionTotal = sessionBreakdown.reduce((s, i) => s + i.count, 0) || 1;
+
+    // Real new/repeat split from backend
+    const newPatients = data?.stats.new_patients ?? 0;
+    const repeatPatients = data?.stats.repeat_patients ?? 0;
+
+    // ── Donut helpers ──────────────────────────────────────────────────────────
+    const circumference = 2 * Math.PI * 40;
+    function buildDonut(items: { count: number; color: string }[]) {
+        let offset = 0;
+        const total = items.reduce((s, i) => s + i.count, 0) || 1;
+        return items.map(item => {
+            const dash = (item.count / total) * circumference;
+            const gap = circumference - dash;
+            const seg = { ...item, dash, gap, offset };
+            offset += dash;
+            return seg;
+        });
+    }
+
+    const sessionDonut = buildDonut(sessionBreakdown);
+    const patientDonut = buildDonut(
+        totalPatients > 0
+            ? [
+                { count: newPatients,    color: TYPE_COLORS[0] },
+                { count: repeatPatients, color: TYPE_COLORS[2] },
+              ]
+            : []
+    );
 
     return (
         <>
-            <div className="p-4 md:p-6 space-y-4 md:space-y-5">
+            <div className="p-4 md:p-6 space-y-5">
 
-                {/* ── Header ─────────────────────────────────────────────────────── */}
+                {/* ── Header ────────────────────────────────────────────────── */}
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
-                        <p className="text-sm text-muted-foreground mt-0.5 hidden sm:block">
-                            {greeting()}, {user?.full_name?.split(" ")[0]} —&nbsp;
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
                             {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
+                        </h1>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                            {user?.full_name}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <button
-                            onClick={() => load(true)}
+                            onClick={() => { load(true); loadUpcoming(period); }}
                             disabled={refreshing}
                             className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
                         >
@@ -149,7 +193,25 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Error banner */}
+                {/* ── Period Toggle ─────────────────────────────────────────── */}
+                <div className="flex items-center gap-1 p-1 bg-muted rounded-xl w-fit">
+                    {(["daily", "weekly", "monthly"] as Period[]).map(p => (
+                        <button
+                            key={p}
+                            onClick={() => setPeriod(p)}
+                            className={cn(
+                                "px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 capitalize",
+                                period === p
+                                    ? "bg-white text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            {p}
+                        </button>
+                    ))}
+                </div>
+
+                {/* ── Error banner ──────────────────────────────────────────── */}
                 {error && (
                     <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -157,279 +219,271 @@ export default function DashboardPage() {
                     </div>
                 )}
 
-                {/* ── Stat Cards ─────────────────────────────────────────────────── */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                    {loading ? (
-                        Array.from({ length: 4 }).map((_, i) => (
-                            <Skeleton key={i} className="h-28 md:h-32 rounded-2xl" />
-                        ))
-                    ) : STATS?.map((s) => {
-                        const Icon = s.icon;
-                        return (
-                            <div
-                                key={s.label}
-                                className={cn(
-                                    "rounded-2xl p-4 md:p-5 flex flex-col gap-2 md:gap-3 border",
-                                    s.filled ? "bg-foreground text-white border-foreground" : "bg-white border-border"
-                                )}
-                            >
-                                <div className="flex items-center justify-between">
-                                    <p className={cn("text-xs md:text-sm font-medium", s.filled ? "text-white/70" : "text-muted-foreground")}>
-                                        {s.label}
-                                    </p>
-                                    <div className={cn("w-6 h-6 md:w-7 md:h-7 rounded-full border flex items-center justify-center shrink-0",
-                                        s.filled ? "border-white/30" : "border-border")}>
-                                        <Icon className={cn("w-3 h-3", s.filled ? "text-white" : "text-muted-foreground")} />
+                {/* ── Two-Column Stat Cards ─────────────────────────────────── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    {/* ── Patients Card ──────────────────────────────────────── */}
+                    <a
+                        href="/patients"
+                        className="group bg-white rounded-2xl border border-border p-5 flex flex-col gap-4 hover:shadow-md transition-shadow cursor-pointer"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-[#2493A2]/10 flex items-center justify-center">
+                                    <Users className="w-4 h-4 text-[#2493A2]" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground">Total Patients</span>
+                            </div>
+                            <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+
+                        {loading ? (
+                            <Skeleton className="h-24" />
+                        ) : (
+                            <div className="flex items-center gap-5">
+                                {/* Donut */}
+                                <div className="relative w-24 h-24 shrink-0">
+                                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                                        {totalPatients === 0 ? (
+                                            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="12" className="text-muted" />
+                                        ) : (
+                                            patientDonut.map((seg, i) => (
+                                                <circle
+                                                    key={i}
+                                                    cx="50" cy="50" r="40"
+                                                    fill="none"
+                                                    stroke={seg.color}
+                                                    strokeWidth="12"
+                                                    strokeDasharray={`${seg.dash} ${seg.gap}`}
+                                                    strokeDashoffset={-seg.offset}
+                                                    strokeLinecap="butt"
+                                                    className="transition-all duration-700"
+                                                />
+                                            ))
+                                        )}
+                                    </svg>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-bold">{totalPatients}</span>
+                                        <span className="text-[10px] text-muted-foreground">total</span>
                                     </div>
                                 </div>
-                                <p className={cn("text-3xl md:text-4xl font-bold tracking-tight",
-                                    s.filled ? "text-white" : "text-foreground")}>
-                                    {s.value.toLocaleString()}
-                                </p>
-                                <p className={cn("text-[10px] md:text-[11px] flex items-center gap-1",
-                                    s.filled ? "text-white/60" : "text-muted-foreground")}>
-                                    <TrendingUp className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{s.sub}</span>
-                                </p>
+                                {/* Legend */}
+                                <div className="flex flex-col gap-2 flex-1">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: TYPE_COLORS[0] }} />
+                                            <span className="text-muted-foreground text-xs">New</span>
+                                        </span>
+                                        <span className="font-semibold">{newPatients}</span>
+                                    </div>
+                                    <div className="w-full bg-muted rounded-full h-1.5">
+                                        <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${totalPatients ? (newPatients / totalPatients) * 100 : 0}%`, background: TYPE_COLORS[0] }} />
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm mt-1">
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: TYPE_COLORS[2] }} />
+                                            <span className="text-muted-foreground text-xs">Repeat</span>
+                                        </span>
+                                        <span className="font-semibold">{repeatPatients}</span>
+                                    </div>
+                                    <div className="w-full bg-muted rounded-full h-1.5">
+                                        <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${totalPatients ? (repeatPatients / totalPatients) * 100 : 0}%`, background: TYPE_COLORS[2] }} />
+                                    </div>
+                                </div>
                             </div>
-                        );
-                    })}
+                        )}
+
+                        <div className="flex items-center gap-1 text-xs text-[#2493A2] font-medium pt-1 border-t border-border">
+                            View all patients <ChevronRight className="w-3 h-3" />
+                        </div>
+                    </a>
+
+                    {/* ── Sessions Card ──────────────────────────────────────── */}
+                    <a
+                        href="/sessions"
+                        className="group bg-white rounded-2xl border border-border p-5 flex flex-col gap-4 hover:shadow-md transition-shadow cursor-pointer"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
+                                    <Stethoscope className="w-4 h-4 text-violet-600" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground">Total Sessions</span>
+                            </div>
+                            <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+
+                        {loading ? (
+                            <Skeleton className="h-24" />
+                        ) : (
+                            <div className="flex items-center gap-5">
+                                {/* Donut */}
+                                <div className="relative w-24 h-24 shrink-0">
+                                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                                        {sessionBreakdown.length === 0 ? (
+                                            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="12" className="text-muted" />
+                                        ) : (
+                                            sessionDonut.map((seg, i) => (
+                                                <circle
+                                                    key={i}
+                                                    cx="50" cy="50" r="40"
+                                                    fill="none"
+                                                    stroke={seg.color}
+                                                    strokeWidth="12"
+                                                    strokeDasharray={`${seg.dash} ${seg.gap}`}
+                                                    strokeDashoffset={-seg.offset}
+                                                    strokeLinecap="butt"
+                                                    className="transition-all duration-700"
+                                                />
+                                            ))
+                                        )}
+                                    </svg>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-bold">{data?.session_status.total ?? 0}</span>
+                                        <span className="text-[10px] text-muted-foreground">total</span>
+                                    </div>
+                                </div>
+                                {/* Legend */}
+                                <div className="flex flex-col gap-1.5 flex-1 text-xs">
+                                    {sessionBreakdown.map(item => (
+                                        <div key={item.label} className="flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: item.color }} />
+                                            <span className="text-muted-foreground flex-1">{item.label}</span>
+                                            <span className="font-semibold tabular-nums">{item.count}</span>
+                                            <span className="text-muted-foreground w-8 text-right">{Math.round((item.count / sessionTotal) * 100)}%</span>
+                                        </div>
+                                    ))}
+                                    {sessionBreakdown.length === 0 && (
+                                        <p className="text-muted-foreground text-center py-2">No sessions yet</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-1 text-xs text-violet-600 font-medium pt-1 border-t border-border">
+                            View sessions dashboard <ChevronRight className="w-3 h-3" />
+                        </div>
+                    </a>
                 </div>
 
-                {/* ── Middle row ─────────────────────────────────────────────────── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_280px_240px] gap-3 md:gap-4">
-
-                    {/* Weekly bar chart */}
-                    <div className="bg-white rounded-2xl border border-border p-4 md:p-5 md:col-span-2 xl:col-span-1">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-semibold text-base">Sessions This Month</h2>
-                            {data && (
-                                <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-                                    {data.stats.sessions_this_month} total
+                {/* ── Upcoming Appointments ─────────────────────────────────── */}
+                <div className="bg-white rounded-2xl border border-border overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays className="w-4 h-4 text-[#2493A2]" />
+                            <h2 className="font-semibold text-base">Upcoming Appointments</h2>
+                            {!upLoading && (
+                                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-lg">
+                                    {upcoming.length} scheduled
                                 </span>
                             )}
                         </div>
-                        {loading ? (
-                            <Skeleton className="h-36" />
-                        ) : (
-                            <div className="flex items-end gap-2 md:gap-3 h-32 md:h-36">
-                                {(data?.weekly_sessions ?? []).map((d) => {
-                                    const pct = (d.count / maxWeekly) * 100;
-                                    const isMax = d.count === maxWeekly && d.count > 0;
-                                    return (
-                                        <div key={d.dow} className="flex flex-col items-center gap-1.5 flex-1 group">
-                                            {isMax && <span className="text-[10px] font-semibold text-foreground">{d.count}</span>}
-                                            <div className="w-full flex items-end relative" style={{ height: "90px" }}>
-                                                <div
-                                                    className={cn("w-full rounded-full transition-all duration-500 group-hover:opacity-80",
-                                                        isMax ? "bg-foreground" : "bg-muted")}
-                                                    style={{ height: `${Math.max(pct, d.count > 0 ? 8 : 4)}%`, minHeight: "4px" }}
-                                                />
-                                            </div>
-                                            <span className="text-[10px] text-muted-foreground">{DOW[d.dow]}</span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        <span className="text-xs text-muted-foreground capitalize">{period}</span>
                     </div>
 
-                    {/* Next session */}
-                    <div className="bg-white rounded-2xl border border-border p-4 md:p-5 flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-semibold text-base">Next Session</h2>
-                            <Clock className="w-4 h-4 text-[#2493A2]" />
+                    {upLoading ? (
+                        <div className="p-4 space-y-2">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <Skeleton key={i} className="h-12" />
+                            ))}
                         </div>
-                        {loading ? (
-                            <Skeleton className="flex-1 min-h-[80px]" />
-                        ) : data?.upcoming_session ? (
-                            <>
-                                <div className="flex-1 bg-muted rounded-xl p-4 space-y-2">
-                                    <p className="font-bold text-base leading-tight">{data.upcoming_session.patient_name}</p>
-                                    <p className="text-xs text-muted-foreground">{data.upcoming_session.session_type_name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {formatDate(data.upcoming_session.scheduled_at)} · {formatTime(data.upcoming_session.scheduled_at)}
-                                    </p>
-                                    <p className="text-[11px] text-[#2493A2] font-medium">
-                                        Dr. {data.upcoming_session.doctor_name}
-                                    </p>
-                                </div>
-                                <Button className="w-full rounded-xl gap-2" size="sm" asChild>
-                                    <a href="/calendar"><CalendarDays className="w-4 h-4" /> View Calendar</a>
-                                </Button>
-                            </>
-                        ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 bg-muted rounded-xl p-4">
-                                <CalendarDays className="w-8 h-8 text-muted-foreground/30" />
-                                <p className="text-sm font-medium text-muted-foreground">No upcoming sessions</p>
-                                <p className="text-xs text-muted-foreground/60">Schedule a session to get started</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Recent patients */}
-                    <div className="bg-white rounded-2xl border border-border p-4 md:p-5 flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-semibold text-base">Recent Patients</h2>
-                            <a href="/patients" className="text-[11px] text-[#2493A2] hover:underline">View all</a>
+                    ) : upcoming.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-14 text-center gap-2">
+                            <CalendarDays className="w-10 h-10 text-muted-foreground/25" />
+                            <p className="text-sm font-medium text-muted-foreground">No upcoming appointments</p>
+                            <p className="text-xs text-muted-foreground/60">Switch period or add a new session</p>
                         </div>
-                        {loading ? (
-                            <div className="space-y-2">
-                                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}
-                            </div>
-                        ) : data?.recent_patients.length ? (
-                            <div className="space-y-2.5">
-                                {data.recent_patients.map((p) => (
-                                    <div key={p.id} className="flex items-center gap-2.5 group cursor-pointer hover:bg-muted/50 rounded-lg px-1 py-0.5 transition-colors">
-                                        <div className="w-7 h-7 rounded-full bg-[#2493A2]/10 text-[#2493A2] flex items-center justify-center text-[10px] font-bold shrink-0">
-                                            {initials(p.full_name)}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium truncate">{p.full_name}</p>
-                                            <p className="text-[10px] text-muted-foreground">{p.patient_code} · {timeAgo(p.created_at)}</p>
-                                        </div>
-                                        <ArrowUpRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-center py-4">
-                                <div>
-                                    <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                                    <p className="text-sm text-muted-foreground">No patients yet</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                    ) : (
+                        /* ── Desktop table ── */
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-muted/40 text-xs text-muted-foreground">
+                                        <th className="text-left font-medium px-5 py-2.5">Date & Time</th>
+                                        <th className="text-left font-medium px-4 py-2.5">Patient</th>
+                                        <th className="text-left font-medium px-4 py-2.5">Session Type</th>
+                                        <th className="text-left font-medium px-4 py-2.5">Doctor</th>
+                                        <th className="text-left font-medium px-4 py-2.5">Status</th>
+                                        <th className="text-left font-medium px-4 py-2.5">Form</th>
+                                        <th className="px-4 py-2.5" />
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {upcoming.map(s => (
+                                        <tr key={s.id} className="hover:bg-muted/30 transition-colors group">
+                                            {/* Date & Time */}
+                                            <td className="px-5 py-3 whitespace-nowrap">
+                                                <p className="font-medium text-foreground">{formatDate(s.scheduled_at)}</p>
+                                                <p className="text-xs text-muted-foreground">{formatTime(s.scheduled_at)}</p>
+                                            </td>
+                                            {/* Patient */}
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-7 h-7 rounded-full bg-[#2493A2]/10 text-[#2493A2] flex items-center justify-center text-[10px] font-bold shrink-0">
+                                                        {initials(s.patient_name)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium truncate max-w-[130px]">{s.patient_name}</p>
+                                                        <p className="text-[10px] text-muted-foreground">{s.patient_code}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            {/* Session type */}
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs bg-muted px-2 py-1 rounded-lg font-medium truncate max-w-[120px] block">
+                                                    {s.session_type_name}
+                                                </span>
+                                            </td>
+                                            {/* Doctor */}
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Stethoscope className="w-3 h-3 text-muted-foreground shrink-0" />
+                                                    <span className="text-xs truncate max-w-[110px]">{s.doctor_name}</span>
+                                                </div>
+                                            </td>
+                                            {/* Status */}
+                                            <td className="px-4 py-3">
+                                                <span className={cn(
+                                                    "inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full border capitalize",
+                                                    STATUS_STYLES[s.status] ?? "bg-muted text-muted-foreground border-border"
+                                                )}>
+                                                    {STATUS_ICONS[s.status]}
+                                                    {s.status.replace("_", "-")}
+                                                </span>
+                                            </td>
+                                            {/* Form */}
+                                            <td className="px-4 py-3">
+                                                {s.form_id ? (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
+                                                        <FileText className="w-3 h-3" /> Submitted
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
+                                                        <FileX className="w-3 h-3" /> Incomplete
+                                                    </span>
+                                                )}
+                                            </td>
+                                            {/* Arrow */}
+                                            <td className="px-4 py-3">
+                                                <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
 
-                {/* ── Bottom row ─────────────────────────────────────────────────── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_240px] gap-3 md:gap-4">
-
-                    {/* Staff */}
-                    <div className="bg-white rounded-2xl border border-border p-4 md:p-5">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-semibold text-base">Staff</h2>
-                            <a href="/staff" className="text-[11px] border border-border rounded-lg px-2.5 py-1 text-muted-foreground hover:bg-muted transition-colors flex items-center gap-1">
-                                <Plus className="w-3 h-3" /> Add
+                    {upcoming.length > 0 && (
+                        <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+                            <p className="text-xs text-muted-foreground">Showing {upcoming.length} appointment{upcoming.length !== 1 ? "s" : ""}</p>
+                            <a href="/calendar" className="text-xs text-[#2493A2] font-medium flex items-center gap-1 hover:underline">
+                                Open calendar <ChevronRight className="w-3 h-3" />
                             </a>
                         </div>
-                        {loading ? (
-                            <div className="space-y-3">
-                                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}
-                            </div>
-                        ) : data?.staff.length ? (
-                            <div className="space-y-3">
-                                {data.staff.slice(0, 5).map((m) => (
-                                    <div key={m.id} className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0">
-                                            {initials(m.full_name)}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{m.full_name}</p>
-                                            <p className="text-[11px] text-muted-foreground capitalize">{m.role.replace("_", " ")}</p>
-                                        </div>
-                                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 capitalize",
-                                            ROLE_COLORS[m.role] ?? "bg-gray-100 text-gray-600")}>
-                                            {m.role.replace("_", " ")}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-4 text-sm text-muted-foreground">No staff added yet</div>
-                        )}
-                    </div>
-
-                    {/* Session status donut */}
-                    <div className="bg-white rounded-2xl border border-border p-4 md:p-5">
-                        <h2 className="font-semibold text-base mb-4">Session Breakdown</h2>
-                        {loading ? (
-                            <div className="flex flex-col items-center gap-4">
-                                <Skeleton className="w-32 h-32 rounded-full" />
-                                <div className="w-full space-y-2">
-                                    {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-4" />)}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="relative w-28 h-28 md:w-32 md:h-32">
-                                    <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-                                        <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="12" className="text-muted" />
-                                        <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="12"
-                                            strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-                                            className="text-foreground transition-all duration-700" />
-                                    </svg>
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                        <span className="text-2xl font-bold">{completedPct}%</span>
-                                        <span className="text-[10px] text-muted-foreground">Done</span>
-                                    </div>
-                                </div>
-                                <div className="w-full space-y-2">
-                                    {[
-                                        { label: "Completed", count: data?.session_status.completed ?? 0, color: "bg-foreground" },
-                                        { label: "Scheduled", count: data?.session_status.scheduled ?? 0, color: "bg-[#2493A2]" },
-                                        { label: "Cancelled", count: data?.session_status.cancelled ?? 0, color: "bg-muted-foreground/30" },
-                                        { label: "No-Show", count: data?.session_status.no_show ?? 0, color: "bg-red-200" },
-                                    ].filter(i => i.count > 0).map((item) => {
-                                        const pct = statusTotal > 0 ? Math.round((item.count / statusTotal) * 100) : 0;
-                                        return (
-                                            <div key={item.label} className="flex items-center gap-2 text-xs">
-                                                <div className={cn("w-2 h-2 rounded-full shrink-0", item.color)} />
-                                                <span className="text-muted-foreground flex-1">{item.label}</span>
-                                                <span className="font-medium text-foreground">{item.count}</span>
-                                                <span className="text-muted-foreground w-8 text-right">{pct}%</span>
-                                            </div>
-                                        );
-                                    })}
-                                    {statusTotal === 0 && (
-                                        <p className="text-center text-sm text-muted-foreground py-2">No sessions yet</p>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Alerts + clock */}
-                    <div className="bg-foreground text-white rounded-2xl p-4 md:p-5 flex flex-col gap-3 md:col-span-2 xl:col-span-1">
-                        <p className="text-sm font-semibold text-white/70">Today&apos;s Alerts</p>
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
-                            {loading ? (
-                                <>
-                                    <Skeleton className="h-14 bg-white/10" />
-                                    <Skeleton className="h-14 bg-white/10" />
-                                </>
-                            ) : (
-                                <>
-                                    {(data?.stats.waitlist_count ?? 0) > 0 && (
-                                        <div className="bg-white/10 rounded-xl p-3">
-                                            <p className="text-xs font-medium">{data!.stats.waitlist_count} on Waitlist</p>
-                                            <p className="text-[11px] text-white/60 mt-0.5">Patients awaiting slots</p>
-                                        </div>
-                                    )}
-                                    {(data?.stats.unassigned_forms ?? 0) > 0 && (
-                                        <div className="bg-white/10 rounded-xl p-3">
-                                            <p className="text-xs font-medium">{data!.stats.unassigned_forms} Forms Unassigned</p>
-                                            <p className="text-[11px] text-white/60 mt-0.5">Session types need forms</p>
-                                        </div>
-                                    )}
-                                    {(data?.stats.waitlist_count ?? 0) === 0 && (data?.stats.unassigned_forms ?? 0) === 0 && !loading && (
-                                        <div className="bg-white/10 rounded-xl p-3">
-                                            <p className="text-xs font-medium flex items-center gap-1.5">
-                                                <Activity className="w-3 h-3 text-emerald-400" /> All clear!
-                                            </p>
-                                            <p className="text-[11px] text-white/60 mt-0.5">No pending alerts</p>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                        <div className="text-center">
-                            <LiveClock />
-                            <p className="text-[11px] text-white/50 mt-0.5">Current Time</p>
-                        </div>
-                    </div>
+                    )}
                 </div>
+
             </div>
 
             <NewSessionModal open={sessionOpen} onClose={() => setSessionOpen(false)} />
