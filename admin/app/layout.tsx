@@ -10,7 +10,7 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "ProHuman Health — Admin",
+  title: "ProHuman Health Admin",
   description: "Admin panel for ProHuman Health clinic management platform.",
 };
 
