@@ -134,7 +134,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
             </div>
         </header>
 
-        <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+        {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
         </>
     );
 }

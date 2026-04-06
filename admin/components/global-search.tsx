@@ -31,11 +31,10 @@ const KIND_COLOR: Record<ResultKind, string> = {
 };
 
 interface GlobalSearchProps {
-    open: boolean;
     onClose: () => void;
 }
 
-export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
+export function GlobalSearch({ onClose }: GlobalSearchProps) {
     const router = useRouter();
     const { patients } = usePatients();
     const { doctors } = useStaff();
@@ -46,22 +45,18 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
 
-    // Reset on open
+    // Auto-focus on mount
     useEffect(() => {
-        if (open) {
-            setQuery("");
-            setCursor(0);
-            setTimeout(() => inputRef.current?.focus(), 50);
-        }
-    }, [open]);
+        const id = setTimeout(() => inputRef.current?.focus(), 30);
+        return () => clearTimeout(id);
+    }, []);
 
     // Close on Escape
     useEffect(() => {
-        if (!open) return;
         const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [open, onClose]);
+    }, [onClose]);
 
     const results: SearchResult[] = (() => {
         const q = query.trim().toLowerCase();
@@ -102,8 +97,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         return out.slice(0, 12);
     })();
 
-    // Reset cursor when results change
-    useEffect(() => { setCursor(0); }, [results.length]);
+    // Clamp cursor to valid range without a separate effect
+    const safeCursor = results.length === 0 ? 0 : Math.min(cursor, results.length - 1);
 
     const navigate = useCallback((result: SearchResult) => {
         router.push(result.href);
@@ -117,18 +112,16 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
             setCursor(c => Math.max(c - 1, 0));
-        } else if (e.key === "Enter" && results[cursor]) {
-            navigate(results[cursor]);
+        } else if (e.key === "Enter" && results[safeCursor]) {
+            navigate(results[safeCursor]);
         }
     };
 
     // Scroll active item into view
     useEffect(() => {
-        const el = listRef.current?.children[cursor] as HTMLElement | undefined;
+        const el = listRef.current?.children[safeCursor] as HTMLElement | undefined;
         el?.scrollIntoView({ block: "nearest" });
-    }, [cursor]);
-
-    if (!open) return null;
+    }, [safeCursor]);
 
     return (
         <>
@@ -170,7 +163,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                                         onMouseEnter={() => setCursor(i)}
                                         className={cn(
                                             "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
-                                            i === cursor ? "bg-muted/60" : "hover:bg-muted/40"
+                                            i === safeCursor ? "bg-muted/60" : "hover:bg-muted/40"
                                         )}
                                     >
                                         <span className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0", KIND_COLOR[r.kind])}>
