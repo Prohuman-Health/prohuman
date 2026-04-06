@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
     ClipboardList, FileText, Settings,
-    ShieldCheck, LogOut, Activity, X,
+    ShieldCheck, LogOut, X,
     Dumbbell, MessageCircle, BrainCircuit, ChevronDown, ChevronRight, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -169,14 +169,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 </ul>
             </div>
 
-            {/* Dark promo card — always pinned at bottom */}
-            <div className="mx-4 mb-4 mt-3 shrink-0 rounded-2xl p-4 space-y-2" style={{ background: 'linear-gradient(135deg, #304A78 0%, #0A0E28 100%)' }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#DCB13C22' }}>
-                    <Activity className="w-4 h-4" style={{ color: '#DCB13C' }} />
-                </div>
-                <p className="font-bold text-sm leading-tight text-white">ProHuman<br />Health Admin</p>
-                <p className="text-[11px] leading-relaxed" style={{ color: '#57BDA2' }}>Manage your clinic from one place.</p>
-            </div>
         </aside>
     );
 }

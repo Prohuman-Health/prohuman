@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search, Bell, Mail, Menu, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
+import { GlobalSearch } from "@/components/global-search";
 
 const PAGE_LABELS: Record<string, string> = {
     "/dashboard": "Dashboard",
@@ -31,6 +32,19 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
     const { user, logout } = useAuth();
     const router = useRouter();
     const [showMenu, setShowMenu] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+
+    // ⌘F / Ctrl+F opens search
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+                e.preventDefault();
+                setSearchOpen(true);
+            }
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -42,6 +56,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         : "?";
 
     return (
+        <>
         <header className="h-14 border-b border-border bg-white flex items-center justify-between px-4 md:px-6 shrink-0 gap-3 rounded-t-2xl">
             {/* Left — hamburger (mobile) + search */}
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -54,11 +69,19 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
                 <p className="font-semibold text-sm truncate lg:hidden">{label}</p>
 
-                <div className="hidden md:flex items-center gap-2 bg-muted rounded-xl px-3.5 py-2 text-sm text-muted-foreground w-56 lg:w-64 cursor-pointer hover:bg-muted/80 transition-colors">
+                <button
+                    onClick={() => setSearchOpen(true)}
+                    className="hidden md:flex items-center gap-2 bg-muted rounded-xl px-3.5 py-2 text-sm text-muted-foreground w-56 lg:w-64 hover:bg-muted/80 transition-colors"
+                >
                     <Search className="w-3.5 h-3.5 shrink-0" />
-                    <span className="flex-1">Search anything</span>
+                    <span className="flex-1 text-left">Search anything</span>
                     <kbd className="text-[10px] bg-white border border-border rounded-md px-1.5 py-0.5 font-mono text-muted-foreground hidden lg:block">⌘F</kbd>
-                </div>
+                </button>
+
+                {/* Mobile search icon */}
+                <button onClick={() => setSearchOpen(true)} className="md:hidden w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors shrink-0">
+                    <Search className="w-4 h-4" />
+                </button>
             </div>
 
             {/* Right */}
@@ -110,5 +133,8 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
                 </div>
             </div>
         </header>
+
+        <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+        </>
     );
 }
