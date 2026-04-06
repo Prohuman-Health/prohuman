@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Lock, Palette, Globe, Database, ChevronRight, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw } from "lucide-react";
+import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -109,13 +109,10 @@ export default function SettingsPage() {
                                             className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
                                     </Row>
                                     <Row label="Working Hours" icon={Clock}>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <Input className="rounded-xl" value={get("working_hours_start", "09:00")} onChange={set("working_hours_start")} type="time" />
-                                            <Input className="rounded-xl" value={get("working_hours_end", "18:00")} onChange={set("working_hours_end")} type="time" />
-                                        </div>
-                                    </Row>
-                                    <Row label="Default Session Fee (₹)" icon={IndianRupee}>
-                                        <Input type="number" min={0} className="rounded-xl w-40" value={get("default_fee", "500")} onChange={set("default_fee")} />
+                                        <WorkingHoursEditor
+                                            value={get("working_hours", '[{"start":"09:00","end":"18:00"}]')}
+                                            onChange={v => setSettings(prev => ({ ...prev, working_hours: v }))}
+                                        />
                                     </Row>
                                 </Section>
                             )}
@@ -167,8 +164,15 @@ export default function SettingsPage() {
                                             </button>
                                         </div>
                                     ))}
-                                    <Row label="Session Timeout (minutes)" icon={Clock}>
-                                        <Input type="number" min={5} className="rounded-xl w-28" value={get("session_timeout_minutes", "30")} onChange={set("session_timeout_minutes")} />
+                                    <Row label="Session Timeout" icon={Clock}>
+                                        <select
+                                            value={get("session_timeout_minutes", "30")}
+                                            onChange={set("session_timeout_minutes")}
+                                            className="h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none w-40">
+                                            <option value="30">30 minutes</option>
+                                            <option value="60">60 minutes</option>
+                                            <option value="90">90 minutes</option>
+                                        </select>
                                     </Row>
                                 </Section>
                             )}
@@ -234,6 +238,45 @@ export default function SettingsPage() {
                     </>
                 )}
             </div>
+        </div>
+    );
+}
+
+function WorkingHoursEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    let shifts: { start: string; end: string }[];
+    try { shifts = JSON.parse(value); } catch { shifts = [{ start: "09:00", end: "18:00" }]; }
+    if (!Array.isArray(shifts) || shifts.length === 0) shifts = [{ start: "09:00", end: "18:00" }];
+
+    function update(index: number, field: "start" | "end", val: string) {
+        const next = shifts.map((s, i) => i === index ? { ...s, [field]: val } : s);
+        onChange(JSON.stringify(next));
+    }
+    function addShift() { onChange(JSON.stringify([...shifts, { start: "09:00", end: "18:00" }])); }
+    function removeShift(index: number) {
+        if (shifts.length <= 1) return;
+        onChange(JSON.stringify(shifts.filter((_, i) => i !== index)));
+    }
+
+    return (
+        <div className="space-y-2">
+            {shifts.map((s, i) => (
+                <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-14 shrink-0">Shift {i + 1}</span>
+                    <Input className="rounded-xl w-28" type="time" value={s.start} onChange={e => update(i, "start", e.target.value)} />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input className="rounded-xl w-28" type="time" value={s.end} onChange={e => update(i, "end", e.target.value)} />
+                    {shifts.length > 1 && (
+                        <button type="button" onClick={() => removeShift(i)}
+                            className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+            ))}
+            <button type="button" onClick={addShift}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1">
+                <Plus className="w-3.5 h-3.5" /> Add shift
+            </button>
         </div>
     );
 }

@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
     ClipboardList, FileText, Settings,
     ShieldCheck, LogOut, Activity, X,
-    Dumbbell, MessageCircle, BrainCircuit, ChevronDown, ChevronRight,
+    Dumbbell, MessageCircle, BrainCircuit, ChevronDown, ChevronRight, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -25,6 +25,7 @@ const menuItems = [
 
 const directoryItems = [
     { href: "/exercises", label: "Exercises", icon: Dumbbell },
+    { href: "/question-directory", label: "Question Directory", icon: BookOpen },
     { href: "/whatsapp", label: "WhatsApp Messages", icon: MessageCircle },
     { href: "/algorithms", label: "Algorithms", icon: BrainCircuit },
 ];

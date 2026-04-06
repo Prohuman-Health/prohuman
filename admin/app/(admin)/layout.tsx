@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/sidebar";
 import TopBar from "@/components/topbar";
-import { useAuth } from "@/lib/auth-context";
-import { onboardingApi } from "@/lib/api";
+import { useAuth, useInactivityLogout } from "@/lib/auth-context";
+import { onboardingApi, settingsApi } from "@/lib/api";
 import { Loader2, ShieldOff, LogOut } from "lucide-react";
 
 // Data contexts
@@ -38,6 +38,26 @@ function AccessDenied({ email, role, onLogout }: { email: string; role: string; 
             </div>
         </div>
     );
+}
+
+/** Reads inactivity settings and wires up auto-logout. Renders nothing. */
+function AutoLogoutMonitor() {
+    const { logout } = useAuth();
+    const [timeoutMs, setTimeoutMs] = useState<number | undefined>(undefined);
+
+    useEffect(() => {
+        settingsApi.list().then(list => {
+            const enabled = list.find(s => s.key === "session_expiry_enabled")?.value;
+            const minutes = list.find(s => s.key === "session_timeout_minutes")?.value;
+            if (enabled === "true" || enabled === true) {
+                const mins = parseInt(String(minutes ?? "30"), 10);
+                if (!isNaN(mins) && mins > 0) setTimeoutMs(mins * 60_000);
+            }
+        }).catch(() => { /* ignore */ });
+    }, []);
+
+    useInactivityLogout(timeoutMs, logout);
+    return null;
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -88,6 +108,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
                             {/* Right panel */}
                             <div className="flex flex-col flex-1 min-w-0 overflow-hidden rounded-2xl bg-[#f7f7f7]">
+                                <AutoLogoutMonitor />
                                 <TopBar onMenuClick={() => setSidebarOpen(true)} />
                                 <main className="flex-1 overflow-y-auto overflow-x-hidden">
                                     {children}

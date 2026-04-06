@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Search, RefreshCw, UserCheck, UserX, Pencil } from "lucide-react";
+import { Plus, Search, RefreshCw, UserCheck, UserX, Pencil, Trash2, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,9 @@ export default function StaffPage() {
     const [addStaffOpen, setAddStaffOpen] = useState(false);
     const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
     const [togglingId, setTogglingId] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     const filtered = staff.filter(s =>
         !search || s.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -50,6 +53,21 @@ export default function StaffPage() {
             // silent fail — error would need a toast system
         } finally {
             setTogglingId(null);
+        }
+    }
+
+    async function confirmDelete() {
+        if (!deleteTarget) return;
+        setDeleting(true);
+        setDeleteError(null);
+        try {
+            await staffApi.deleteAndRevoke(deleteTarget.id);
+            setDeleteTarget(null);
+            await refresh();
+        } catch (err) {
+            setDeleteError(err instanceof Error ? err.message : "Failed to delete user");
+        } finally {
+            setDeleting(false);
         }
     }
 
@@ -153,6 +171,14 @@ export default function StaffPage() {
                                             >
                                                 {s.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                                             </button>
+                                            {/* Delete & Revoke button */}
+                                            <button
+                                                onClick={e => { e.stopPropagation(); setDeleteTarget(s); setDeleteError(null); }}
+                                                title="Delete user & revoke sessions"
+                                                className="p-1.5 text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors rounded-lg"
+                                            >
+                                                <ShieldOff className="w-3.5 h-3.5" />
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -161,6 +187,38 @@ export default function StaffPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Delete & Revoke confirmation dialog */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setDeleteTarget(null); setDeleteError(null); }} />
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                                <ShieldOff className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-sm">Delete User &amp; Revoke Access</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">This cannot be undone</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            <span className="font-semibold text-foreground">{deleteTarget.full_name}</span> ({deleteTarget.email}) will be permanently deleted and all active sessions immediately revoked — including Google SSO sessions.
+                        </p>
+                        {deleteError && (
+                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{deleteError}</p>
+                        )}
+                        <div className="flex justify-end gap-3 pt-1">
+                            <Button variant="outline" className="rounded-xl text-xs" onClick={() => { setDeleteTarget(null); setDeleteError(null); }} disabled={deleting}>
+                                Cancel
+                            </Button>
+                            <Button className="rounded-xl text-xs bg-red-600 hover:bg-red-700 gap-2" onClick={confirmDelete} disabled={deleting}>
+                                {deleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />Deleting…</> : "Delete & Revoke"}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <NewStaffModal open={addStaffOpen} onClose={() => setAddStaffOpen(false)} />
             <EditStaffModal staff={editingStaff} onClose={() => setEditingStaff(null)} />

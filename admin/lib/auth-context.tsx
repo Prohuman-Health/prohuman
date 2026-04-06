@@ -4,6 +4,7 @@ import {
     createContext,
     useContext,
     useEffect,
+    useRef,
     useState,
     useCallback,
     ReactNode,
@@ -15,6 +16,32 @@ interface AuthState {
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
+}
+
+/**
+ * Hook that logs the user out after `timeoutMs` milliseconds of inactivity.
+ * Pass 0 or undefined to disable.
+ */
+export function useInactivityLogout(timeoutMs: number | undefined, logout: () => void) {
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (!timeoutMs || timeoutMs <= 0) return;
+
+        function reset() {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(logout, timeoutMs);
+        }
+
+        const events = ["mousemove", "keydown", "pointerdown", "scroll", "touchstart"];
+        events.forEach(e => window.addEventListener(e, reset, { passive: true }));
+        reset(); // start the timer immediately
+
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            events.forEach(e => window.removeEventListener(e, reset));
+        };
+    }, [timeoutMs, logout]);
 }
 
 const AuthContext = createContext<AuthState | null>(null);
