@@ -201,29 +201,12 @@ export default function SettingsPage() {
 
                             {/* ── Data ──────────────────────────────────── */}
                             {activeTab === "data" && (
-                                <Section title="Data & Backups" desc="Export or manage your clinic data.">
-                                    <div className="space-y-3">
-                                        {[
-                                            { label: "Export Patients (CSV)", desc: "Download all patient records", action: "Export" },
-                                            { label: "Export Sessions (CSV)", desc: "Download all session history", action: "Export" },
-                                            { label: "Export Staff (CSV)", desc: "Download staff directory", action: "Export" },
-                                            { label: "Full Data Backup", desc: "Download complete clinic backup as ZIP", action: "Download" },
-                                        ].map(item => (
-                                            <div key={item.label} className="flex items-center justify-between py-3.5 px-4 bg-muted/40 rounded-xl">
-                                                <div>
-                                                    <p className="text-sm font-medium">{item.label}</p>
-                                                    <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
-                                                </div>
-                                                <Button size="sm" variant="outline" className="rounded-xl text-xs shrink-0">{item.action}</Button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
-                                        <p className="text-sm font-semibold text-red-700">Danger Zone</p>
-                                        <p className="text-xs text-red-600">Permanently delete all clinic data. This action cannot be undone.</p>
-                                        <Button size="sm" className="rounded-xl bg-red-600 hover:bg-red-700 text-xs">Delete All Data</Button>
-                                    </div>
-                                </Section>
+                                <DataBackupTab />
+                            )}
+
+                            {/* ── Labels ──────────────────────────────────── */}
+                            {activeTab === "labels" && (
+                                <PatientLabelsTab />
                             )}
                         </div>
 
