@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Search, Clock, MoreHorizontal, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Plus, Search, Clock, MoreHorizontal, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Pencil, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useStaff } from "@/lib/contexts/staff-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import type { Doctor } from "@/lib/api";
+import { doctorsApi, type DoctorAvailabilitySlot } from "@/lib/api";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 import { NewStaffModal } from "@/components/modals/new-staff-modal";
 
@@ -26,10 +27,56 @@ function dateKey(y: number, m: number, d: number) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-type ViewMode = "profile" | "calendar";
+type ViewMode = "profile" | "calendar" | "availability";
 
 function Skeleton({ className }: { className?: string }) {
     return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
+
+interface SlotFormData { start_time: string; end_time: string; label: string; is_active: boolean; }
+function SlotForm({ data, onChange, onSave, onCancel, saving }: {
+    data: SlotFormData;
+    onChange: (d: SlotFormData) => void;
+    onSave: () => void;
+    onCancel: () => void;
+    saving: boolean;
+}) {
+    return (
+        <div className="bg-white rounded-lg p-2.5 mt-1 space-y-2 border border-border/60">
+            <div className="flex gap-2">
+                <div className="flex-1">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase">Start</label>
+                    <input type="time" value={data.start_time} onChange={e => onChange({ ...data, start_time: e.target.value })}
+                        className="w-full mt-0.5 h-7 rounded-lg border border-border bg-muted/30 px-2 text-xs focus:outline-none" />
+                </div>
+                <div className="flex-1">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase">End</label>
+                    <input type="time" value={data.end_time} onChange={e => onChange({ ...data, end_time: e.target.value })}
+                        className="w-full mt-0.5 h-7 rounded-lg border border-border bg-muted/30 px-2 text-xs focus:outline-none" />
+                </div>
+            </div>
+            <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase">Label (optional)</label>
+                <input type="text" placeholder="e.g. Morning, Afternoon" value={data.label}
+                    onChange={e => onChange({ ...data, label: e.target.value })}
+                    className="w-full mt-0.5 h-7 rounded-lg border border-border bg-muted/30 px-2 text-xs focus:outline-none" />
+            </div>
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={data.is_active} onChange={e => onChange({ ...data, is_active: e.target.checked })} className="rounded" />
+                Active
+            </label>
+            <div className="flex items-center gap-1.5 pt-0.5">
+                <button onClick={onSave} disabled={saving}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-foreground text-white text-xs disabled:opacity-50">
+                    <Check className="w-3 h-3" /> Save
+                </button>
+                <button onClick={onCancel} disabled={saving}
+                    className="px-2.5 py-1 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    );
 }
 
 export default function DoctorsPage() {
@@ -41,6 +88,85 @@ export default function DoctorsPage() {
     const [viewMode, setViewMode] = useState<ViewMode>("profile");
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [addDoctorOpen, setAddDoctorOpen] = useState(false);
+
+    // Availability state
+    const [slots, setSlots] = useState<DoctorAvailabilitySlot[]>([]);
+    const [slotsLoading, setSlotsLoading] = useState(false);
+    const [slotError, setSlotError] = useState<string | null>(null);
+
+    // Slot form: null = closed, "new-N" = adding slot for day N, or slotId = editing
+    const [slotFormKey, setSlotFormKey] = useState<string | null>(null);
+    const [slotFormData, setSlotFormData] = useState({ start_time: "", end_time: "", label: "", is_active: true });
+    const [slotSaving, setSlotSaving] = useState(false);
+
+    const loadSlots = useCallback(async (id: string) => {
+        setSlotsLoading(true);
+        setSlotError(null);
+        try {
+            const data = await doctorsApi.getAvailability(id);
+            setSlots(Array.isArray(data) ? data : []);
+        } catch {
+            setSlotError("Failed to load availability.");
+        } finally {
+            setSlotsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (selected && viewMode === "availability") loadSlots(selected.id);
+    }, [selected, viewMode, loadSlots]);
+
+    async function saveSlot() {
+        if (!selected || !slotFormKey) return;
+        if (!slotFormData.start_time || !slotFormData.end_time) return;
+        setSlotSaving(true);
+        try {
+            if (slotFormKey.startsWith("new-")) {
+                const day = parseInt(slotFormKey.replace("new-", ""), 10);
+                await doctorsApi.addSlot(selected.id, {
+                    day_of_week: day,
+                    start_time: slotFormData.start_time,
+                    end_time: slotFormData.end_time,
+                    label: slotFormData.label || null,
+                    is_active: slotFormData.is_active,
+                    branch_id: selected.branch_id ?? "",
+                });
+            } else {
+                await doctorsApi.updateSlot(selected.id, slotFormKey, {
+                    start_time: slotFormData.start_time,
+                    end_time: slotFormData.end_time,
+                    label: slotFormData.label || null,
+                    is_active: slotFormData.is_active,
+                });
+            }
+            setSlotFormKey(null);
+            await loadSlots(selected.id);
+        } catch {
+            setSlotError("Could not save slot.");
+        } finally {
+            setSlotSaving(false);
+        }
+    }
+
+    async function deleteSlot(slotId: string) {
+        if (!selected) return;
+        try {
+            await doctorsApi.deleteSlot(selected.id, slotId);
+            setSlots(prev => prev.filter(s => s.id !== slotId));
+        } catch {
+            setSlotError("Could not delete slot.");
+        }
+    }
+
+    function openAddSlot(day: number) {
+        setSlotFormKey(`new-${day}`);
+        setSlotFormData({ start_time: "09:00", end_time: "17:00", label: "", is_active: true });
+    }
+
+    function openEditSlot(s: DoctorAvailabilitySlot) {
+        setSlotFormKey(s.id);
+        setSlotFormData({ start_time: s.start_time, end_time: s.end_time, label: s.label ?? "", is_active: s.is_active });
+    }
 
     const now = new Date();
     const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -89,6 +215,8 @@ export default function DoctorsPage() {
     function selectDoctor(d: Doctor) {
         setSelected(prev => prev?.id === d.id ? null : d);
         setViewMode("profile");
+        setSlotFormKey(null);
+        setSlotError(null);
         setSelectedDay(now.getDate());
         setViewYear(now.getFullYear());
         setViewMonth(now.getMonth());
@@ -101,12 +229,13 @@ export default function DoctorsPage() {
 
         return (
             <div className={cn("flex flex-col overflow-hidden", mobile ? "h-full" : "flex-1")}>
-                {/* Profile / Calendar tabs */}
+                {/* Profile / Calendar / Availability tabs */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
                     <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
-                        {[["profile", <User key="u" className="w-3 h-3" />, "Profile"],
-                        ["calendar", <CalendarDays key="c" className="w-3 h-3" />, "Calendar"]].map(([mode, Icon, label]) => (
-                            <button key={mode as string} onClick={() => setViewMode(mode as ViewMode)}
+                        {([["profile", <User key="u" className="w-3 h-3" />, "Profile"],
+                        ["calendar", <CalendarDays key="c" className="w-3 h-3" />, "Calendar"],
+                        ["availability", <Clock key="cl" className="w-3 h-3" />, "Schedule"]] as const).map(([mode, Icon, label]) => (
+                            <button key={mode} onClick={() => setViewMode(mode)}
                                 className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                                     viewMode === mode ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
                                 {Icon} {label}
@@ -157,6 +286,81 @@ export default function DoctorsPage() {
                                 Schedule Session
                             </Button>
                         </div>
+                    </div>
+                )}
+
+                {/* Availability */}
+                {viewMode === "availability" && (
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly Schedule</p>
+                        {slotError && <p className="text-xs text-red-500 mb-2">{slotError}</p>}
+                        {slotsLoading ? (
+                            <div className="flex items-center justify-center py-8 text-muted-foreground">
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                            </div>
+                        ) : (
+                            DAYS.map((dayName, dayIdx) => {
+                                const daySlots = slots.filter(s => s.day_of_week === dayIdx);
+                                const isAdding = slotFormKey === `new-${dayIdx}`;
+                                return (
+                                    <div key={dayIdx} className="bg-muted/40 rounded-xl p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-xs font-semibold">{dayName}</p>
+                                            {!isAdding && (
+                                                <button onClick={() => openAddSlot(dayIdx)}
+                                                    className="w-5 h-5 rounded-md bg-white border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                                                    <Plus className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {daySlots.length === 0 && !isAdding && (
+                                            <p className="text-[11px] text-muted-foreground italic">No slots</p>
+                                        )}
+
+                                        {daySlots.map(slot => {
+                                            const isEditing = slotFormKey === slot.id;
+                                            if (isEditing) return (
+                                                <SlotForm key={slot.id}
+                                                    data={slotFormData}
+                                                    onChange={setSlotFormData}
+                                                    onSave={saveSlot}
+                                                    onCancel={() => setSlotFormKey(null)}
+                                                    saving={slotSaving}
+                                                />
+                                            );
+                                            return (
+                                                <div key={slot.id} className={cn("flex items-center justify-between rounded-lg px-2.5 py-1.5 mb-1 text-xs",
+                                                    slot.is_active ? "bg-white" : "bg-muted/60 opacity-60")}>
+                                                    <span className="font-medium">
+                                                        {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                                                        {slot.label && <span className="ml-1.5 text-muted-foreground">· {slot.label}</span>}
+                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button onClick={() => openEditSlot(slot)} className="text-muted-foreground hover:text-foreground transition-colors">
+                                                            <Pencil className="w-3 h-3" />
+                                                        </button>
+                                                        <button onClick={() => deleteSlot(slot.id)} className="text-muted-foreground hover:text-red-500 transition-colors">
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {isAdding && (
+                                            <SlotForm
+                                                data={slotFormData}
+                                                onChange={setSlotFormData}
+                                                onSave={saveSlot}
+                                                onCancel={() => setSlotFormKey(null)}
+                                                saving={slotSaving}
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 )}
 

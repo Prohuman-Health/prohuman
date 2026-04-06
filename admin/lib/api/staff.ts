@@ -25,6 +25,7 @@ export const staffApi = {
 export interface Doctor {
     id: string; staff_id: string; full_name: string; email: string;
     phone: string | null; specialty: string | null; bio: string | null; is_active: boolean;
+    branch_id: string | null;
 }
 
 export interface DoctorAvailabilitySlot {

@@ -8,7 +8,7 @@ export const listDoctors = asyncHandler(async (req: Request, res: Response) => {
   const { branch_id } = req.query as Record<string, string>;
   let sql = `
     SELECT d.id, d.specialty, d.bio,
-           s.id AS staff_id, s.full_name, s.email, s.phone, s.is_active
+           s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active
     FROM doctors d
     JOIN staff s ON s.id = d.staff_id
   `;
