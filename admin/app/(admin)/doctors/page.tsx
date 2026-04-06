@@ -236,7 +236,7 @@ export default function DoctorsPage() {
                         ["calendar", <CalendarDays key="c" className="w-3 h-3" />, "Calendar"],
                         ["availability", <Clock key="cl" className="w-3 h-3" />, "Schedule"]] as const).map(([mode, Icon, label]) => (
                             <button key={mode} onClick={() => setViewMode(mode)}
-                                className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                className={cn("flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
                                     viewMode === mode ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
                                 {Icon} {label}
                             </button>
@@ -520,7 +520,7 @@ export default function DoctorsPage() {
 
                 {/* Side panel — desktop */}
                 {selected && (
-                    <div className="hidden lg:flex w-[280px] shrink-0 bg-white rounded-2xl flex-col overflow-hidden border border-border/50">
+                    <div className="hidden lg:flex w-[320px] shrink-0 bg-white rounded-2xl flex-col overflow-hidden border border-border/50">
                         <DetailPanel />
                     </div>
                 )}
