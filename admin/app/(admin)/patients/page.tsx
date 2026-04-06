@@ -1,12 +1,13 @@
 "use client";
-import { useState } from "react";
-import { Search, Plus, ChevronRight, RefreshCw, X, User, Phone, Mail, Calendar, Hash } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Search, Plus, ChevronRight, RefreshCw, X, User, Phone, Mail, Calendar, Hash, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import type { Patient } from "@/lib/api";
+import { patientLabelsApi, PatientLabel } from "@/lib/api";
 import { NewPatientModal } from "@/components/modals/new-patient-modal";
 import { PatientHistoryModal } from "@/components/modals/patient-history-modal";
 import { EditPatientModal } from "@/components/modals/edit-patient-modal";
@@ -25,10 +26,60 @@ export default function PatientsPage() {
     const [editPatient, setEditPatient] = useState<Patient | null>(null);
     const LIMIT = 20;
 
-    const filtered = patients.filter(p =>
-        !search || p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        p.phone.includes(search) || p.patient_code.toLowerCase().includes(search.toLowerCase())
-    );
+    // Patient labels state
+    const [labelDefs, setLabelDefs] = useState<PatientLabel[]>([]);
+    const [labelsMap, setLabelsMap] = useState<Record<string, PatientLabel[]>>({});
+    const [filterLabel, setFilterLabel] = useState<string>(""); // label id to filter by, "" = all
+    const [selectedPatientLabels, setSelectedPatientLabels] = useState<PatientLabel[]>([]);
+    const [assigningLabel, setAssigningLabel] = useState(false);
+
+    const loadLabels = useCallback(async () => {
+        try {
+            const [defs, map] = await Promise.all([
+                patientLabelsApi.listDefinitions(),
+                patientLabelsApi.labelsMap(),
+            ]);
+            setLabelDefs(defs);
+            setLabelsMap(map);
+        } catch { /* ignore */ }
+    }, []);
+
+    useEffect(() => { loadLabels(); }, [loadLabels]);
+
+    // When selected patient changes, reload their labels from the map
+    useEffect(() => {
+        if (selected) {
+            setSelectedPatientLabels(labelsMap[selected.id] ?? []);
+        }
+    }, [selected, labelsMap]);
+
+    async function assignLabel(labelId: string) {
+        if (!selected) return;
+        setAssigningLabel(true);
+        try {
+            await patientLabelsApi.assign(selected.id, labelId);
+            const updated = await patientLabelsApi.labelsMap();
+            setLabelsMap(updated);
+            setSelectedPatientLabels(updated[selected.id] ?? []);
+        } catch { /* ignore */ } finally { setAssigningLabel(false); }
+    }
+
+    async function removeLabel(labelId: string) {
+        if (!selected) return;
+        try {
+            await patientLabelsApi.remove(selected.id, labelId);
+            const updated = await patientLabelsApi.labelsMap();
+            setLabelsMap(updated);
+            setSelectedPatientLabels(updated[selected.id] ?? []);
+        } catch { /* ignore */ }
+    }
+
+    const filtered = patients.filter(p => {
+        const matchesSearch = !search || p.full_name.toLowerCase().includes(search.toLowerCase()) ||
+            p.phone.includes(search) || p.patient_code.toLowerCase().includes(search.toLowerCase());
+        const matchesLabel = !filterLabel || (labelsMap[p.id] ?? []).some(l => l.id === filterLabel);
+        return matchesSearch && matchesLabel;
+    });
 
     return (
         <div className="flex h-full overflow-hidden gap-4 p-5">
@@ -61,6 +112,24 @@ export default function PatientsPage() {
                             </button>
                         ))}
                     </div>
+                    {labelDefs.length > 0 && (
+                        <div className="flex items-center gap-1 bg-white rounded-xl p-1 overflow-x-auto max-w-xs">
+                            <button onClick={() => setFilterLabel("")}
+                                className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap",
+                                    !filterLabel ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
+                                <Tag className="w-3 h-3" /> All Labels
+                            </button>
+                            {labelDefs.map(l => (
+                                <button key={l.id} onClick={() => setFilterLabel(filterLabel === l.id ? "" : l.id)}
+                                    className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap",
+                                        filterLabel === l.id ? "text-white" : "text-muted-foreground hover:text-foreground")}
+                                    style={filterLabel === l.id ? { backgroundColor: l.color } : undefined}>
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
+                                    {l.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Table */}
@@ -69,7 +138,7 @@ export default function PatientsPage() {
                         <table className="w-full text-sm min-w-[700px]">
                             <thead className="border-b border-border/60 sticky top-0 bg-white z-10">
                                 <tr>
-                                    {["Patient", "Code", "Age / Gender", "Phone", "Status", "Registered", ""].map(h => (
+                                    {["Patient", "Labels", "Code", "Age / Gender", "Phone", "Status", "Registered", ""].map(h => (
                                         <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
                                     ))}
                                 </tr>
@@ -94,6 +163,16 @@ export default function PatientsPage() {
                                                     {p.full_name.charAt(0)}
                                                 </div>
                                                 <span className="font-medium">{p.full_name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <div className="flex items-center gap-1 flex-wrap max-w-[160px]">
+                                                {(labelsMap[p.id] ?? []).map(lbl => (
+                                                    <span key={lbl.id} className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                                                        style={{ backgroundColor: lbl.color + "20", color: lbl.color, border: `1px solid ${lbl.color}40` }}>
+                                                        {lbl.name}
+                                                    </span>
+                                                ))}
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{p.patient_code}</td>
@@ -173,6 +252,37 @@ export default function PatientsPage() {
                                 <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3 leading-relaxed">{selected.complaints}</p>
                             </div>
                         )}
+
+                        {/* Labels */}
+                        <div>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Labels</p>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {selectedPatientLabels.length === 0 && (
+                                    <p className="text-xs text-muted-foreground">No labels assigned</p>
+                                )}
+                                {selectedPatientLabels.map(lbl => (
+                                    <span key={lbl.id} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                                        style={{ backgroundColor: lbl.color + "20", color: lbl.color, border: `1px solid ${lbl.color}40` }}>
+                                        {lbl.name}
+                                        <button onClick={() => removeLabel(lbl.id)}
+                                            className="opacity-60 hover:opacity-100 transition-opacity ml-0.5">
+                                            <X className="w-2.5 h-2.5" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                            {labelDefs.filter(l => !selectedPatientLabels.some(sl => sl.id === l.id)).length > 0 && (
+                                <select onChange={e => { if (e.target.value) assignLabel(e.target.value); e.target.value = ""; }}
+                                    disabled={assigningLabel}
+                                    className="w-full h-8 px-2 rounded-xl border border-input bg-background text-xs focus:outline-none appearance-none text-muted-foreground">
+                                    <option value="">+ Add label…</option>
+                                    {labelDefs.filter(l => !selectedPatientLabels.some(sl => sl.id === l.id)).map(l => (
+                                        <option key={l.id} value={l.id}>{l.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
                         <div className="space-y-2">
                             <Button size="sm" className="w-full rounded-xl text-xs" onClick={() => setHistoryPatient(selected)}>View Full History</Button>
                             <Button variant="outline" size="sm" className="w-full rounded-xl text-xs" onClick={() => setEditPatient(selected)}>Edit Patient</Button>

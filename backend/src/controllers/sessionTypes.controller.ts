@@ -27,17 +27,17 @@ export const getSessionType = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const createSessionType = asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, default_duration_minutes, fee, form_id, is_active } = req.body;
+  const { name, description, default_duration_minutes, fee, form_id, is_active, color } = req.body;
   const result = await query(
-    `INSERT INTO session_types (name, description, default_duration_minutes, fee, form_id, is_active)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [name, description ?? null, default_duration_minutes, fee, form_id ?? null, is_active ?? true]
+    `INSERT INTO session_types (name, description, default_duration_minutes, fee, form_id, is_active, color)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [name, description ?? null, default_duration_minutes, fee, form_id ?? null, is_active ?? true, color ?? null]
   );
   ApiResponse.created(res, result.rows[0]);
 });
 
 export const updateSessionType = asyncHandler(async (req: Request, res: Response) => {
-  const allowed = ["name","description","default_duration_minutes","fee","form_id","is_active"];
+  const allowed = ["name","description","default_duration_minutes","fee","form_id","is_active","color"];
   const sets: string[] = []; const vals: unknown[] = []; let i = 1;
   for (const [k, v] of Object.entries(req.body)) {
     if (allowed.includes(k)) { sets.push(`${k} = $${i++}`); vals.push(v); }

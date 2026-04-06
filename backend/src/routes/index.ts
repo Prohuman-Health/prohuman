@@ -23,6 +23,7 @@ import whatsappRoutes from "./whatsapp.routes";
 import algorithmRoutes from "./algorithms.routes";
 import pointsRoutes from "./points.routes";
 import accessControlRoutes from "./accessControl.routes";
+import patientLabelRoutes from "./patientLabels.routes";
 import onboardingRoutes from "./onboarding.routes";
 import dashboardRoutes from "./dashboard.routes";
 
@@ -52,6 +53,7 @@ router.use("/whatsapp", whatsappRoutes);
 router.use("/algorithms", algorithmRoutes);
 router.use("/points", pointsRoutes);
 router.use("/access-control", accessControlRoutes);
+router.use("/patient-labels", patientLabelRoutes);
 router.use("/onboarding", onboardingRoutes);
 router.use("/dashboard", dashboardRoutes);
 

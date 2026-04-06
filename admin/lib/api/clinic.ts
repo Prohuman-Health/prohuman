@@ -4,6 +4,7 @@ export interface SessionType {
     id: string; name: string; description: string | null;
     default_duration_minutes: number; fee: number;
     form_id: string | null; form_title?: string | null; is_active: boolean;
+    color?: string | null;
 }
 
 export const sessionTypesApi = {

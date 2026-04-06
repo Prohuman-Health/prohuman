@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useStaff } from "@/lib/contexts/staff-context";
+import { useCatalog } from "@/lib/contexts/catalog-context";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 import type { Session } from "@/lib/api";
 
@@ -54,11 +55,12 @@ function dateKey(y: number, m: number, d: number) {
 
 // ── Day View ──────────────────────────────────────────────────────────────────
 function DayView({
-    date, sessions, doctorColorMap, filterDoctor, onAddSession,
+    date, sessions, doctorColorMap, sessionTypeColorMap, filterDoctor, onAddSession,
 }: {
     date: Date;
     sessions: Session[];
     doctorColorMap: Record<string, number>;
+    sessionTypeColorMap: Record<string, string>;
     filterDoctor: string;
     onAddSession: () => void;
 }) {
@@ -149,7 +151,11 @@ function DayView({
                         const topPx = ((startMin - START_HOUR * 60) / 60) * SLOT_HEIGHT;
                         const heightPx = Math.max((s.duration_minutes / 60) * SLOT_HEIGHT, 28);
                         const colorIdx = doctorColorMap[s.doctor_id] ?? 0;
-                        const bgCls = SESSION_BG[colorIdx % SESSION_BG.length];
+                        const stHex = sessionTypeColorMap[s.session_type_name];
+                        const bgCls = stHex ? undefined : SESSION_BG[colorIdx % SESSION_BG.length];
+                        const blockStyle = stHex
+                            ? { backgroundColor: stHex + "18", borderColor: stHex + "60", color: stHex }
+                            : undefined;
                         const statusCls = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
 
                         // Handle overlaps in same hour — offset by doctor index
@@ -170,6 +176,7 @@ function DayView({
                                     height: `${heightPx}px`,
                                     left: `calc(4rem + ${leftPct}%)`,
                                     width: `calc(${widthPct}% - 0.75rem)`,
+                                    ...blockStyle,
                                 }}>
                                 <p className="text-[11px] font-bold truncate leading-tight">{s.patient_name}</p>
                                 <p className="text-[10px] truncate opacity-80">{s.session_type_name}</p>
@@ -197,6 +204,7 @@ function DayView({
 export default function CalendarPage() {
     const { sessions, loading, refresh } = useSessions();
     const { doctors } = useStaff();
+    const { sessionTypes } = useCatalog();
 
     const today = new Date();
     const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -219,6 +227,12 @@ export default function CalendarPage() {
         doctors.forEach((d, i) => { map[d.id] = CHIP_COLORS[i % CHIP_COLORS.length]; });
         return map;
     }, [doctors]);
+
+    const sessionTypeColorMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        sessionTypes.forEach(st => { if (st.color) map[st.name] = st.color; });
+        return map;
+    }, [sessionTypes]);
 
     const sessionsByDate = useMemo(() => {
         const map: Record<string, Session[]> = {};
@@ -498,6 +512,7 @@ export default function CalendarPage() {
                             date={selectedDate}
                             sessions={sessions}
                             doctorColorMap={doctorColorMap}
+                            sessionTypeColorMap={sessionTypeColorMap}
                             filterDoctor={filterDoctor}
                             onAddSession={() => {
                                 setSelectedDateForModal(dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()));

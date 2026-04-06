@@ -15,4 +15,5 @@ export * from "./catalog";
 export * from "./clinic";
 export * from "./whatsapp";
 export * from "./branches";
+export * from "./patientLabels";
 

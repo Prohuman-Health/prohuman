@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
     Search, RefreshCw, CalendarDays, X, Loader2, FileText,
     CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/contexts/sessions-context";
+import { useCatalog } from "@/lib/contexts/catalog-context";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 import {
     sessionsApi, Session,
@@ -385,6 +386,7 @@ function SessionDetail({ session, onClose, onFormOpen, onAttended }: {
 // ── Main Sessions Page ─────────────────────────────────────────────────────────
 export default function SessionsPage() {
     const { sessions, total, loading, filter, page, setFilter, setPage, refresh } = useSessions();
+    const { sessionTypes } = useCatalog();
     const [search, setSearch] = useState("");
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [selected, setSelected] = useState<Session | null>(null);
@@ -392,6 +394,12 @@ export default function SessionsPage() {
     const [activeOpen, setActiveOpen] = useState(true);
     const [completedOpen, setCompletedOpen] = useState(true);
     const LIMIT = 25;
+
+    const sessionTypeColorMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        sessionTypes.forEach(st => { if (st.color) map[st.name] = st.color; });
+        return map;
+    }, [sessionTypes]);
 
     // After attendance is marked, refresh and update selected panel
     function handleAttended() {
@@ -416,6 +424,7 @@ export default function SessionsPage() {
         const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
         const dt = new Date(s.scheduled_at);
         const isSelected = selected?.id === s.id;
+        const stColor = sessionTypeColorMap[s.session_type_name];
         return (
             <tr
                 onClick={() => setSelected(isSelected ? null : s)}
@@ -427,7 +436,17 @@ export default function SessionsPage() {
                     <span className="ml-1.5 text-[10px] text-muted-foreground font-mono">{s.patient_code}</span>
                 </td>
                 <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">Dr. {s.doctor_name}</td>
-                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{s.session_type_name}</td>
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                    {stColor ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                            style={{ backgroundColor: stColor + "20", color: stColor, border: `1px solid ${stColor}40` }}>
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: stColor }} />
+                            {s.session_type_name}
+                        </span>
+                    ) : (
+                        <span className="text-muted-foreground text-sm">{s.session_type_name}</span>
+                    )}
+                </td>
                 <td className="px-5 py-3.5 whitespace-nowrap">
                     <p className="text-xs font-medium">{dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
                     <p className="text-[11px] text-muted-foreground font-mono">{dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
@@ -466,10 +485,10 @@ export default function SessionsPage() {
         rows: Session[]; open: boolean; onToggle: () => void; emptyText: string;
     }) {
         return (
-            <div className="bg-white rounded-2xl border border-border/50 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-border/50">
                 <button
                     onClick={onToggle}
-                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/30 transition-colors"
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/30 transition-colors rounded-2xl"
                 >
                     <div className="flex items-center gap-2.5">
                         <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", accent)}>
@@ -484,7 +503,7 @@ export default function SessionsPage() {
                 </button>
 
                 {open && (
-                    <div className="overflow-x-auto border-t border-border/60">
+                    <div className="overflow-x-auto border-t border-border/60 rounded-b-2xl">
                         <table className="w-full text-sm min-w-[700px]">
                             <thead className="border-b border-border/60 bg-muted/30">
                                 <tr>

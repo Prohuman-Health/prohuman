@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw, Plus, Trash2 } from "lucide-react";
+import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { settingsApi, Setting } from "@/lib/api";
+import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel } from "@/lib/api";
 
-type Tab = "clinic" | "notifications" | "security" | "locale" | "data";
+type Tab = "clinic" | "notifications" | "security" | "locale" | "data" | "labels";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType; color: string }[] = [
     { id: "clinic", label: "Clinic Profile", icon: Building2, color: "bg-violet-100 text-violet-700" },
     { id: "notifications", label: "Notifications", icon: Bell, color: "bg-amber-100 text-amber-700" },
     { id: "security", label: "Security & Access", icon: Lock, color: "bg-red-100 text-red-700" },
     { id: "locale", label: "Timezone & Locale", icon: Globe, color: "bg-blue-100 text-blue-700" },
+    { id: "labels", label: "Patient Labels", icon: Tag, color: "bg-pink-100 text-pink-700" },
     { id: "data", label: "Data & Backups", icon: Database, color: "bg-emerald-100 text-emerald-700" },
 ];
 
@@ -227,7 +228,7 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Save footer */}
-                        {activeTab !== "data" && (
+                        {activeTab !== "data" && activeTab !== "labels" && (
                             <div className="px-6 py-4 border-t border-border/60 flex items-center justify-end gap-3">
                                 {saved && <span className="text-xs text-emerald-600 font-medium">Changes saved ✓</span>}
                                 <Button onClick={save} disabled={saving} className="rounded-xl gap-2">
@@ -301,5 +302,224 @@ function Row({ label, icon: Icon, children }: { label: string; icon: React.Eleme
             </label>
             {children}
         </div>
+    );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function downloadCsv(filename: string, rows: string[][]) {
+    const csv = rows.map(r => r.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ── Data Backup Tab ────────────────────────────────────────────────────────────
+function DataBackupTab() {
+    const [exporting, setExporting] = useState<string | null>(null);
+    const [lastExport, setLastExport] = useState<Record<string, string>>(() => {
+        try { return JSON.parse(localStorage.getItem("prohuman_last_export") ?? "{}"); } catch { return {}; }
+    });
+
+    function markExport(key: string) {
+        const updated = { ...lastExport, [key]: new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) };
+        setLastExport(updated);
+        localStorage.setItem("prohuman_last_export", JSON.stringify(updated));
+    }
+
+    async function exportPatients() {
+        setExporting("patients");
+        try {
+            const res = await patientsApi.list({ limit: "9999", page: "1" });
+            const rows: string[][] = [["Code", "Full Name", "Age", "Gender", "Phone", "Email", "Complaints", "Status", "Registered"],
+                ...(res.patients ?? []).map(p => [p.patient_code, p.full_name, String(p.age), p.gender, p.phone, p.email ?? "", p.complaints ?? "", p.is_active ? "Active" : "Discharged", new Date(p.created_at).toLocaleDateString("en-IN")])];
+            downloadCsv("patients.csv", rows);
+            markExport("patients");
+        } catch { /* ignore */ } finally { setExporting(null); }
+    }
+
+    async function exportSessions() {
+        setExporting("sessions");
+        try {
+            const res = await sessionsApi.list({ limit: "9999", page: "1" });
+            const rows: string[][] = [["Patient", "Code", "Doctor", "Session Type", "Date", "Duration (min)", "Status"],
+                ...(res.sessions ?? []).map(s => [s.patient_name, s.patient_code, s.doctor_name, s.session_type_name, new Date(s.scheduled_at).toLocaleString("en-IN"), String(s.duration_minutes), s.status])];
+            downloadCsv("sessions.csv", rows);
+            markExport("sessions");
+        } catch { /* ignore */ } finally { setExporting(null); }
+    }
+
+    async function exportStaff() {
+        setExporting("staff");
+        try {
+            const all = await staffApi.list();
+            const rows: string[][] = [["Full Name", "Email", "Role", "Status"],
+                ...all.map(m => [m.full_name, m.email, m.role, m.is_active ? "Active" : "Inactive"])];
+            downloadCsv("staff.csv", rows);
+            markExport("staff");
+        } catch { /* ignore */ } finally { setExporting(null); }
+    }
+
+    async function exportAll() {
+        setExporting("all");
+        try {
+            await Promise.all([exportPatients(), exportSessions(), exportStaff()]);
+        } catch { /* ignore */ } finally { setExporting(null); }
+    }
+
+    const ITEMS = [
+        { key: "patients", label: "Export Patients (CSV)", desc: "All patient records", action: "Export", fn: exportPatients },
+        { key: "sessions", label: "Export Sessions (CSV)", desc: "All session history", action: "Export", fn: exportSessions },
+        { key: "staff", label: "Export Staff (CSV)", desc: "Staff directory", action: "Export", fn: exportStaff },
+        { key: "all", label: "Full Data Backup", desc: "Downloads all CSVs at once", action: "Download All", fn: exportAll },
+    ];
+
+    return (
+        <Section title="Data & Backups" desc="Export your clinic data as CSV files.">
+            <div className="space-y-3">
+                {ITEMS.map(item => (
+                    <div key={item.key} className="flex items-center justify-between py-3.5 px-4 bg-muted/40 rounded-xl">
+                        <div>
+                            <p className="text-sm font-medium">{item.label}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-muted-foreground">{item.desc}</p>
+                                {lastExport[item.key] && (
+                                    <p className="text-[11px] text-muted-foreground/60">· Last: {lastExport[item.key]}</p>
+                                )}
+                            </div>
+                        </div>
+                        <Button size="sm" variant="outline" className="rounded-xl text-xs shrink-0 gap-1.5"
+                            disabled={exporting !== null}
+                            onClick={item.fn}>
+                            {exporting === item.key
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Download className="w-3.5 h-3.5" />}
+                            {item.action}
+                        </Button>
+                    </div>
+                ))}
+            </div>
+        </Section>
+    );
+}
+
+// ── Patient Labels Tab ──────────────────────────────────────────────────────────
+const LABEL_PRESETS = ["#7C3AED", "#10B981", "#F59E0B", "#3B82F6", "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#EF4444", "#14B8A6"];
+
+function PatientLabelsTab() {
+    const [labels, setLabels] = useState<PatientLabel[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState<PatientLabel | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [form, setForm] = useState({ name: "", color: "#7C3AED" });
+    const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { setLabels(await patientLabelsApi.listDefinitions()); }
+        catch { setLabels([]); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    function openCreate() { setForm({ name: "", color: "#7C3AED" }); setEditing(null); setCreating(true); setError(null); }
+    function openEdit(l: PatientLabel) { setForm({ name: l.name, color: l.color }); setEditing(l); setCreating(true); setError(null); }
+    function cancelForm() { setCreating(false); setEditing(null); }
+
+    async function save() {
+        if (!form.name.trim()) { setError("Label name is required."); return; }
+        setSaving(true); setError(null);
+        try {
+            if (editing) await patientLabelsApi.update(editing.id, { name: form.name.trim(), color: form.color });
+            else await patientLabelsApi.create({ name: form.name.trim(), color: form.color });
+            await load();
+            cancelForm();
+        } catch (e) { setError(e instanceof Error ? e.message : "Failed to save"); }
+        finally { setSaving(false); }
+    }
+
+    async function deleteLabel(id: string) {
+        setDeletingId(id);
+        try { await patientLabelsApi.delete(id); await load(); }
+        catch { /* ignore */ }
+        finally { setDeletingId(null); }
+    }
+
+    return (
+        <Section title="Patient Labels" desc="Create colored labels to tag and filter patients.">
+            {loading ? (
+                <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
+            ) : (
+                <div className="space-y-2">
+                    {labels.length === 0 && !creating && (
+                        <p className="text-xs text-muted-foreground py-4 text-center">No labels yet. Create your first one!</p>
+                    )}
+                    {labels.map(l => (
+                        <div key={l.id} className="flex items-center justify-between py-3 px-4 bg-muted/40 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
+                                <span className="text-sm font-medium">{l.name}</span>
+                                <span className="text-[11px] text-muted-foreground font-mono">{l.color}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => openEdit(l)}
+                                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => deleteLabel(l.id)} disabled={deletingId === l.id}
+                                    className="p-1.5 text-muted-foreground hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
+                                    {deletingId === l.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+
+                    {creating && (
+                        <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
+                            {error && (
+                                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">
+                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />{error}
+                                </div>
+                            )}
+                            <div className="flex items-center gap-3">
+                                <Input placeholder="Label name (e.g. Priority, Insurance…)" className="rounded-xl flex-1"
+                                    value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold text-muted-foreground">Color</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {LABEL_PRESETS.map(c => (
+                                        <button key={c} type="button" onClick={() => setForm(p => ({ ...p, color: c }))}
+                                            className={cn("w-7 h-7 rounded-full transition-all ring-offset-1 shrink-0",
+                                                form.color === c ? "ring-2 ring-foreground" : "hover:ring-2 hover:ring-border")}
+                                            style={{ backgroundColor: c }} />
+                                    ))}
+                                    <input type="color" value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))}
+                                        className="w-7 h-7 rounded-full border border-input cursor-pointer bg-transparent p-0.5 shrink-0" />
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 justify-end">
+                                <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={cancelForm}>Cancel</Button>
+                                <Button size="sm" className="rounded-xl gap-2" onClick={save} disabled={saving}>
+                                    {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                    {editing ? "Save Changes" : "Create Label"}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {!creating && (
+                        <button onClick={openCreate}
+                            className="flex items-center gap-2 px-4 py-2.5 w-full rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
+                            <Plus className="w-3.5 h-3.5" /> New Label
+                        </button>
+                    )}
+                </div>
+            )}
+        </Section>
     );
 }

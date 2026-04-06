@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Bell, Mail, Menu, LogOut } from "lucide-react";
+import { Search, Bell, Mail, Menu, LogOut, ChevronLeft } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
 import { GlobalSearch } from "@/components/global-search";
@@ -67,7 +67,13 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
                     <Menu className="w-4 h-4" />
                 </button>
 
-                <p className="font-semibold text-sm truncate lg:hidden">{label}</p>
+                <button
+                    onClick={() => router.back()}
+                    className="lg:hidden flex items-center gap-1 text-sm font-semibold truncate text-foreground hover:text-muted-foreground transition-colors min-w-0"
+                >
+                    <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{label}</span>
+                </button>
 
                 <button
                     onClick={() => setSearchOpen(true)}

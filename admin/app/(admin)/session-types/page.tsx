@@ -9,12 +9,13 @@ import { cn } from "@/lib/utils";
 import { sessionTypesApi, SessionType, formsApi, Form } from "@/lib/api";
 
 const DOT_COLORS = ["bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-blue-500", "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-indigo-500"];
+const PRESET_COLORS = ["#7C3AED", "#10B981", "#F59E0B", "#3B82F6", "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#EF4444", "#14B8A6"];
 
 // ── Session Type Modal ──────────────────────────────────────────────────────
 function SessionTypeModal({ open, initial, onClose, onSaved }: {
     open: boolean; initial?: SessionType | null; onClose: () => void; onSaved: () => void;
 }) {
-    const [form, setForm] = useState({ name: "", description: "", default_duration_minutes: "60", fee: "0", form_id: "" });
+    const [form, setForm] = useState({ name: "", description: "", default_duration_minutes: "60", fee: "0", form_id: "", color: "" });
     const [forms, setForms] = useState<Form[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -32,9 +33,10 @@ function SessionTypeModal({ open, initial, onClose, onSaved }: {
                 default_duration_minutes: String(initial.default_duration_minutes),
                 fee: String(initial.fee),
                 form_id: initial.form_id ?? "",
+                color: initial.color ?? "",
             });
         } else {
-            setForm({ name: "", description: "", default_duration_minutes: "60", fee: "0", form_id: "" });
+            setForm({ name: "", description: "", default_duration_minutes: "60", fee: "0", form_id: "", color: "" });
         }
         setError(null);
     }, [initial, open]);
@@ -55,6 +57,7 @@ function SessionTypeModal({ open, initial, onClose, onSaved }: {
                 default_duration_minutes: dur,
                 fee: parseFloat(form.fee) || 0,
                 ...(form.form_id ? { form_id: form.form_id } : { form_id: null }),
+                color: form.color.trim() || null,
             };
             if (initial) await sessionTypesApi.update(initial.id, payload);
             else await sessionTypesApi.create(payload);
@@ -115,6 +118,31 @@ function SessionTypeModal({ open, initial, onClose, onSaved }: {
                             <p className="text-[11px] text-muted-foreground mt-1">
                                 Patients will fill this form after each session of this type. Only published forms appear.
                             </p>
+                        </Field>
+
+                        <Field label="Color">
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {PRESET_COLORS.map(c => (
+                                        <button key={c} type="button" onClick={() => setForm(p => ({ ...p, color: c }))}
+                                            className={cn("w-7 h-7 rounded-full transition-all ring-offset-1 shrink-0",
+                                                form.color === c ? "ring-2 ring-foreground" : "hover:ring-2 hover:ring-border")}
+                                            style={{ backgroundColor: c }} />
+                                    ))}
+                                    <button type="button" onClick={() => setForm(p => ({ ...p, color: "" }))}
+                                        className={cn("w-7 h-7 rounded-full border-2 border-dashed border-muted-foreground/30 transition-all flex items-center justify-center text-muted-foreground text-xs",
+                                            !form.color ? "ring-2 ring-foreground ring-offset-1" : "hover:ring-2 hover:ring-border hover:ring-offset-1")}>
+                                        ✕
+                                    </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input type="color" value={form.color || "#7C3AED"}
+                                        onChange={e => setForm(p => ({ ...p, color: e.target.value }))}
+                                        className="w-8 h-8 rounded-lg border border-input cursor-pointer bg-transparent p-0.5 shrink-0" />
+                                    <Input placeholder="#7C3AED (or leave blank for default)" className="rounded-xl font-mono text-xs h-8 flex-1"
+                                        value={form.color} onChange={set("color")} maxLength={7} />
+                                </div>
+                            </div>
                         </Field>
 
                         <Field label="Description">
@@ -232,8 +260,10 @@ export default function SessionTypesPage() {
                     <div key={t.id} className="bg-white rounded-2xl p-4 md:p-5 space-y-4 hover:shadow-sm transition-shadow border border-border/40">
                         <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                                    <div className={cn("w-3.5 h-3.5 rounded-full", DOT_COLORS[i % DOT_COLORS.length])} />
+                                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", !t.color && "bg-muted")}
+                                    style={t.color ? { backgroundColor: t.color + "20" } : undefined}>
+                                    <div className={cn("w-3.5 h-3.5 rounded-full", !t.color && DOT_COLORS[i % DOT_COLORS.length])}
+                                        style={t.color ? { backgroundColor: t.color } : undefined} />
                                 </div>
                                 <p className="font-semibold text-sm leading-tight">{t.name}</p>
                             </div>
