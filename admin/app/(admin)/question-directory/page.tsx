@@ -99,11 +99,13 @@ interface QForm {
     options: string[];
     scale_min: string;
     scale_max: string;
+    treatment_tags: string[];
+    body_regions: string[];
     is_active: boolean;
 }
 
 function emptyForm(): QForm {
-    return { text: "", section: "Intake", answer_type: "free_text", options: [], scale_min: "0", scale_max: "10", is_active: true };
+    return { text: "", section: "Intake", answer_type: "free_text", options: [], scale_min: "0", scale_max: "10", treatment_tags: [], body_regions: [], is_active: true };
 }
 
 function validateForm(f: QForm): Record<string, string> {
@@ -127,8 +129,10 @@ function QuestionModal({
 }: { initial?: Question; onClose: () => void; onSaved: () => void }) {
     const isNew = !initial;
 
-    // Derive section from tags
-    const existingSection = (initial?.tags?.find(t => (SECTIONS as readonly string[]).includes(t)) ?? "Other") as Section;
+    // Derive section from category or legacy tags
+    const existingSection = (initial?.category && (SECTIONS as readonly string[]).includes(initial.category)
+        ? initial.category
+        : initial?.tags?.find(t => (SECTIONS as readonly string[]).includes(t)) ?? "Other") as Section;
 
     const [form, setForm] = useState<QForm>(initial ? {
         text: initial.text,
@@ -137,6 +141,8 @@ function QuestionModal({
         options: initial.options ?? [],
         scale_min: String(initial.scale_min ?? "0"),
         scale_max: String(initial.scale_max ?? "10"),
+        treatment_tags: initial.treatment_tags ?? [],
+        body_regions: initial.body_regions ?? [],
         is_active: initial.is_active,
     } : emptyForm());
 
@@ -162,7 +168,10 @@ function QuestionModal({
                 options: form.answer_type === "multiple_choice" ? form.options : undefined,
                 scale_min: form.answer_type === "scale" ? parseInt(form.scale_min) : undefined,
                 scale_max: form.answer_type === "scale" ? parseInt(form.scale_max) : undefined,
+                category: form.section,
                 tags: [form.section],
+                treatment_tags: form.treatment_tags,
+                body_regions: form.body_regions,
                 is_active: form.is_active,
             };
             if (isNew) await questionsApi.create(payload);
@@ -271,6 +280,34 @@ function QuestionModal({
                         </div>
                     )}
 
+                    {/* Treatment tags */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold">Treatment Type Tags
+                            <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                        </label>
+                        <OptionChipsInput
+                            chips={form.treatment_tags}
+                            onChange={v => update({ treatment_tags: v })}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                            e.g. Physiotherapy · Massage · Exercise · Visceral · Pelvic Floor
+                        </p>
+                    </div>
+
+                    {/* Body regions */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold">Body Region Tags
+                            <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                        </label>
+                        <OptionChipsInput
+                            chips={form.body_regions}
+                            onChange={v => update({ body_regions: v })}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                            e.g. Knee · Shoulder · Spine · Hip · Ankle · Neck
+                        </p>
+                    </div>
+
                     {/* Active toggle */}
                     <div className="flex items-center justify-between py-2 border-t border-border/60">
                         <div>
@@ -351,6 +388,12 @@ function SectionGroup({
                                         {q.answer_type === "scale" && (
                                             <span className="text-[11px] text-muted-foreground">{q.scale_min} – {q.scale_max}</span>
                                         )}
+                                        {(q.treatment_tags ?? []).map(t => (
+                                            <span key={t} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{t}</span>
+                                        ))}
+                                        {(q.body_regions ?? []).map(r => (
+                                            <span key={r} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100">{r}</span>
+                                        ))}
                                         {!q.is_active && (
                                             <Badge variant="outline" className="text-[10px] rounded-full px-2 text-muted-foreground">Inactive</Badge>
                                         )}
@@ -383,6 +426,8 @@ export default function QuestionDirectoryPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [filterSection, setFilterSection] = useState<Section | "All">("All");
+    const [filterTreatment, setFilterTreatment] = useState("");
+    const [filterRegion, setFilterRegion] = useState("");
     const [showInactive, setShowInactive] = useState(false);
     const [modal, setModal] = useState<Question | "new" | null>(null);
     const [retireTarget, setRetireTarget] = useState<Question | null>(null);
@@ -400,20 +445,26 @@ export default function QuestionDirectoryPage() {
     // Group by section
     const filtered = questions.filter(q => {
         if (!showInactive && !q.is_active) return false;
-        if (filterSection !== "All" && !q.tags.includes(filterSection)) return false;
+        if (filterSection !== "All" && (q.category ?? "") !== filterSection && !q.tags.includes(filterSection)) return false;
+        if (filterTreatment && !(q.treatment_tags ?? []).some(t => t.toLowerCase().includes(filterTreatment.toLowerCase()))) return false;
+        if (filterRegion && !(q.body_regions ?? []).some(r => r.toLowerCase().includes(filterRegion.toLowerCase()))) return false;
         if (search && !q.text.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
     });
 
     const grouped = SECTIONS.reduce<Record<Section, Question[]>>((acc, sec) => {
-        acc[sec] = filtered.filter(q => q.tags.includes(sec));
+        acc[sec] = filtered.filter(q => (q.category ?? "") === sec || ((!q.category || q.category === "General") && q.tags.includes(sec)));
         return acc;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }, {} as any);
 
-    // Questions with no matching section tag go to "Other"
-    const withSection = new Set(filtered.filter(q => SECTIONS.slice(0, -1).some(s => q.tags.includes(s))).map(q => q.id));
+    // Questions with no matching section go to "Other"
+    const withSection = new Set(filtered.filter(q => SECTIONS.slice(0, -1).some(s => (q.category ?? "") === s || q.tags.includes(s))).map(q => q.id));
     grouped["Other"] = [...(grouped["Other"] ?? []), ...filtered.filter(q => !withSection.has(q.id))];
+
+    // Build autocomplete lists from loaded questions
+    const allTreatmentTags = [...new Set(questions.flatMap(q => q.treatment_tags ?? []))].sort();
+    const allBodyRegions = [...new Set(questions.flatMap(q => q.body_regions ?? []))].sort();
 
     const totalActive = questions.filter(q => q.is_active).length;
 
@@ -453,7 +504,7 @@ export default function QuestionDirectoryPage() {
 
                 {/* Filters */}
                 <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative w-72">
+                    <div className="relative w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input placeholder="Search questions…" className="pl-9 rounded-xl bg-white" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
@@ -465,6 +516,44 @@ export default function QuestionDirectoryPage() {
                         <option value="All">All Sections</option>
                         {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+
+                    {/* Treatment tag filter */}
+                    <div className="relative">
+                        <Input
+                            list="treatment-opts"
+                            placeholder="Treatment type…"
+                            className="rounded-xl bg-white w-44 h-9 text-sm"
+                            value={filterTreatment}
+                            onChange={e => setFilterTreatment(e.target.value)}
+                        />
+                        <datalist id="treatment-opts">
+                            {allTreatmentTags.map(t => <option key={t} value={t} />)}
+                        </datalist>
+                        {filterTreatment && (
+                            <button onClick={() => setFilterTreatment("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                <X className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Body region filter */}
+                    <div className="relative">
+                        <Input
+                            list="region-opts"
+                            placeholder="Body region…"
+                            className="rounded-xl bg-white w-36 h-9 text-sm"
+                            value={filterRegion}
+                            onChange={e => setFilterRegion(e.target.value)}
+                        />
+                        <datalist id="region-opts">
+                            {allBodyRegions.map(r => <option key={r} value={r} />)}
+                        </datalist>
+                        {filterRegion && (
+                            <button onClick={() => setFilterRegion("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                <X className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
 
                     <div className="flex items-center gap-1 bg-white rounded-xl p-1">
                         {([[false, "Active"], [true, "All"]] as const).map(([v, l]) => (
