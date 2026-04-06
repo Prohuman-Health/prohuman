@@ -27,10 +27,31 @@ export interface Doctor {
     phone: string | null; specialty: string | null; bio: string | null; is_active: boolean;
 }
 
+export interface DoctorAvailabilitySlot {
+    id: string;
+    doctor_id: string;
+    branch_id: string;
+    day_of_week: number;  // 0=Sun … 6=Sat
+    start_time: string;   // "HH:MM"
+    end_time: string;     // "HH:MM"
+    label: string | null; // e.g. "Morning", "Afternoon"
+    is_active: boolean;
+}
+
 export const doctorsApi = {
     list: (params?: Record<string, string>) =>
         request<Doctor[]>(`/doctors?${new URLSearchParams(params)}`),
     get: (id: string) => request<Doctor>(`/doctors/${id}`),
     update: (id: string, data: Partial<Doctor>) =>
         request<Doctor>(`/doctors/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    getAvailability: (id: string) =>
+        request<DoctorAvailabilitySlot[]>(`/doctors/${id}/availability`),
+    addSlot: (id: string, data: Omit<DoctorAvailabilitySlot, "id" | "doctor_id">) =>
+        request<DoctorAvailabilitySlot>(`/doctors/${id}/availability`, { method: "POST", body: JSON.stringify(data) }),
+    updateSlot: (id: string, slotId: string, data: Partial<Omit<DoctorAvailabilitySlot, "id" | "doctor_id">>) =>
+        request<DoctorAvailabilitySlot>(`/doctors/${id}/availability/${slotId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    deleteSlot: (id: string, slotId: string) =>
+        request<null>(`/doctors/${id}/availability/${slotId}`, { method: "DELETE" }),
+    setAvailability: (id: string, slots: Omit<DoctorAvailabilitySlot, "id" | "doctor_id">[]) =>
+        request<DoctorAvailabilitySlot[]>(`/doctors/${id}/availability`, { method: "PUT", body: JSON.stringify(slots) }),
 };

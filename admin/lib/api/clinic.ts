@@ -38,7 +38,10 @@ export interface Question {
     options: string[] | undefined;   // only for multiple_choice
     scale_min: number | undefined;   // only for scale
     scale_max: number | undefined;   // only for scale
-    tags: string[];
+    tags: string[];                  // freeform custom tags
+    category: string;                // primary section (Intake, Assessment, etc.)
+    treatment_tags: string[];        // treatment type tags (Physiotherapy, Massage, etc.)
+    body_regions: string[];          // body area tags (Knee, Shoulder, Spine, etc.)
     is_active: boolean;
     created_at: string;
 }
