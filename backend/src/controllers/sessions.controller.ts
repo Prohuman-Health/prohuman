@@ -4,6 +4,15 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 
+async function insertNotif(type: string, title: string, body: string | null, metadata: object, branchId: string | null) {
+  try {
+    await query(
+      `INSERT INTO in_app_notifications (type, title, body, metadata, branch_id) VALUES ($1,$2,$3,$4::jsonb,$5)`,
+      [type, title, body, JSON.stringify(metadata), branchId ?? null]
+    );
+  } catch { /* notification failure must not break main operation */ }
+}
+
 export const listSessions = asyncHandler(async (req: Request, res: Response) => {
   const { patient_id, doctor_id, branch_id, status, from, to, page = "1", limit = "50" } = req.query as Record<string, string>;
   const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -175,6 +184,30 @@ export const cancelSession = asyncHandler(async (req: Request, res: Response) =>
       );
     }
   });
+
+  const cancelInfo = await query(
+    `SELECT p.full_name AS patient_name, sf.full_name AS doctor_name, st.name AS session_type_name
+     FROM sessions s
+     JOIN patients p       ON p.id = s.patient_id
+     JOIN doctors d        ON d.id = s.doctor_id
+     JOIN staff sf         ON sf.id = d.staff_id
+     JOIN session_types st ON st.id = s.session_type_id
+     WHERE s.id = $1`,
+    [req.params.id]
+  );
+  const ci = cancelInfo.rows[0];
+  if (ci) {
+    const cancelTitle = ids.length > 1
+      ? `Series Cancelled — ${ci.patient_name}`
+      : `Session Cancelled — ${ci.patient_name}`;
+    await insertNotif(
+      "session_cancelled", cancelTitle,
+      `${ci.session_type_name} with Dr. ${ci.doctor_name}`,
+      { session_id: req.params.id, patient_name: ci.patient_name },
+      existing.rows[0].branch_id
+    );
+  }
+
   ApiResponse.ok(res, null, "Session(s) cancelled");
 });
 
@@ -249,6 +282,39 @@ export const markAttendance = asyncHandler(async (req: Request, res: Response) =
       }
     }
   });
+
+  const notifyTypeMap: Record<string, string> = {
+    attended: "session_completed",
+    "no-show": "session_no_show",
+    "late-cancellation": "session_late_cancel",
+  };
+  const notifType = notifyTypeMap[attendance as string];
+  if (notifType) {
+    const infoRow = await query(
+      `SELECT p.full_name AS patient_name, sf.full_name AS doctor_name, st.name AS session_type_name
+       FROM sessions s
+       JOIN patients p       ON p.id = s.patient_id
+       JOIN doctors d        ON d.id = s.doctor_id
+       JOIN staff sf         ON sf.id = d.staff_id
+       JOIN session_types st ON st.id = s.session_type_id
+       WHERE s.id = $1`,
+      [req.params.id]
+    );
+    const info = infoRow.rows[0];
+    if (info) {
+      const notifTitles: Record<string, string> = {
+        session_completed:  `Session Completed — ${info.patient_name}`,
+        session_no_show:    `No-Show — ${info.patient_name}`,
+        session_late_cancel:`Late Cancellation — ${info.patient_name}`,
+      };
+      await insertNotif(
+        notifType, notifTitles[notifType],
+        `${info.session_type_name} with Dr. ${info.doctor_name}`,
+        { session_id: req.params.id, patient_name: info.patient_name },
+        existing.rows[0].branch_id
+      );
+    }
+  }
 
   ApiResponse.ok(res, null, "Attendance marked");
 });

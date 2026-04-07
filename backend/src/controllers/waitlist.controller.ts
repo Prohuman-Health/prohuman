@@ -36,7 +36,29 @@ export const addToWaitlist = asyncHandler(async (req: Request, res: Response) =>
     [patient_id, doctor_id ?? null, branch_id, session_type_id ?? null,
      preferred_dates ? JSON.stringify(preferred_dates) : null, notes ?? null]
   );
-  ApiResponse.created(res, result.rows[0]);
+  const wEntry = result.rows[0];
+
+  // Insert in-app notification for appointment request
+  try {
+    const pRow = await query("SELECT full_name FROM patients WHERE id = $1", [patient_id]);
+    const stRow = session_type_id
+      ? await query("SELECT name FROM session_types WHERE id = $1", [session_type_id])
+      : null;
+    const patientName = pRow.rows[0]?.full_name ?? "Unknown Patient";
+    const stName = stRow?.rows[0]?.name ?? null;
+    await query(
+      `INSERT INTO in_app_notifications (type, title, body, metadata, branch_id)
+       VALUES ('appointment_request', $1, $2, $3::jsonb, $4)`,
+      [
+        `Appointment Request \u2014 ${patientName}`,
+        stName ? `Requested: ${stName}${notes ? ` \u2014 ${notes}` : ""}` : (notes ?? null),
+        JSON.stringify({ waitlist_id: wEntry.id, patient_id, session_type_id: session_type_id ?? null }),
+        branch_id ?? null,
+      ]
+    );
+  } catch { /* notification failure must not break main operation */ }
+
+  ApiResponse.created(res, wEntry);
 });
 
 export const updateWaitlistEntry = asyncHandler(async (req: Request, res: Response) => {

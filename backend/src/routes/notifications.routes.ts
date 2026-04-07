@@ -22,4 +22,10 @@ router.patch( "/templates/:id",  authorize("admin"), validate(templateUpdateSche
 // Preview a rendered notification with sample data
 router.post("/templates/:id/preview", authorize("admin"), c.previewNotificationTemplate);
 
+// ── In-app inbox ──────────────────────────────────────────────────────────────
+router.get(   "/inbox",               c.listInbox);
+router.get(   "/inbox/counts",        c.getUnreadCounts);
+router.patch( "/inbox/read-all",      c.markAllRead);
+router.patch( "/inbox/:id/read",      c.markOneRead);
+
 export default router;
