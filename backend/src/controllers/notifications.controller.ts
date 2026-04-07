@@ -85,11 +85,19 @@ export const listInbox = asyncHandler(async (req: Request, res: Response) => {
     vals.push(MAIL_TYPES);
   }
 
+  const countVals = type === "all" ? [] : [MAIL_TYPES];
+  const countFilter = type === "mail"
+    ? `WHERE type = ANY($1::text[])`
+    : type === "notifications" ? `WHERE type != ALL($1::text[])` : "";
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS total FROM in_app_notifications ${countFilter}`,
+    countVals
+  );
   const result = await query(
     `SELECT * FROM in_app_notifications n ${typeFilter} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
     vals
   );
-  ApiResponse.ok(res, result.rows);
+  ApiResponse.ok(res, { notifications: result.rows, total: countResult.rows[0]?.total ?? 0 });
 });
 
 /**

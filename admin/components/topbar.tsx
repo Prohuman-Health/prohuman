@@ -155,7 +155,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
             setLoadingMail(true);
             try {
                 const res = await inboxApi.list("mail");
-                setMailItems(res.notifications);
+                setMailItems(res?.notifications ?? []);
             } catch { /* silent */ } finally { setLoadingMail(false); }
         }
     };
@@ -167,7 +167,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
             setLoadingBell(true);
             try {
                 const res = await inboxApi.list("notifications");
-                setBellItems(res.notifications);
+                setBellItems(res?.notifications ?? []);
             } catch { /* silent */ } finally { setLoadingBell(false); }
         }
     };
