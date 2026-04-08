@@ -3,10 +3,8 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { setToken, auth as authApi } from "@/lib/api";
-import { onboarding } from "@/lib/api";
 
-const FRONTDESK_ROLES = ["receptionist"];
-const FRONTDESK_URL = process.env.NEXT_PUBLIC_FRONTDESK_URL ?? "http://localhost:3002";
+const ALLOWED_ROLES = ["receptionist", "admin", "super_admin"];
 
 // Spinner shown while Suspense is resolving or during the redirect
 function Spinner() {
@@ -34,20 +32,19 @@ function AuthCallbackInner() {
             router.replace("/login?error=google_failed");
             return;
         }
+
+        // Store the token first, then verify role before allowing access
         setToken(token);
 
-        // Check user role before deciding where to send them
         authApi.me()
             .then((user) => {
-                // Receptionists go to the front desk portal
-                if (FRONTDESK_ROLES.includes(user.role)) {
-                    window.location.href = `${FRONTDESK_URL}/auth/callback?token=${encodeURIComponent(token)}`;
+                if (!ALLOWED_ROLES.includes(user.role)) {
+                    // Wrong role — clear the token and redirect back to login with error
+                    import("@/lib/api/core").then(({ clearToken }) => clearToken());
+                    router.replace("/login?error=access_denied");
                     return;
                 }
-                // Admins check onboarding first
-                return onboarding.status()
-                    .then((s) => router.replace(s.completed ? "/dashboard" : "/onboarding"))
-                    .catch(() => router.replace("/dashboard"));
+                router.replace("/dashboard");
             })
             .catch(() => router.replace("/login?error=google_failed"));
     }, [params, router]);

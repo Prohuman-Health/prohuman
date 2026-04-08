@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-bricolage);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* ── Sea from Space palette ──────────────────────────────────── */
+  /* Yellow Gold  #DCB13C  →  oklch(0.762 0.157 82)               */
+  /* Aqua         #57BDA2  →  oklch(0.720 0.100 175)              */
+  /* Teal         #2493A2  →  oklch(0.596 0.100 200)              */
+  /* Medium Blue  #304A78  →  oklch(0.375 0.090 252)              */
+  /* Navy Blue    #2C3259  →  oklch(0.290 0.072 267)              */
+  /* Dark Blue    #0A0E28  →  oklch(0.125 0.055 267)              */
+
+  /* Light-mode roots (clean whites, using palette as accents) */
+  --background: oklch(0.965 0.005 240);
+  --foreground: oklch(0.125 0.055 267);       /* Dark Blue */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.125 0.055 267);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.125 0.055 267);
+  --primary: oklch(0.596 0.100 200);           /* Teal */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.720 0.100 175);         /* Aqua */
+  --secondary-foreground: oklch(0.125 0.055 267);
+  --muted: oklch(0.930 0.010 240);
+  --muted-foreground: oklch(0.375 0.090 252);  /* Medium Blue */
+  --accent: oklch(0.762 0.157 82);             /* Yellow Gold */
+  --accent-foreground: oklch(0.125 0.055 267);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.880 0.015 240);
+  --input: oklch(0.880 0.015 240);
+  --ring: oklch(0.596 0.100 200);              /* Teal */
+  /* Charts: Gold · Aqua · Teal · MedBlue · Navy */
+  --chart-1: oklch(0.762 0.157 82);
+  --chart-2: oklch(0.720 0.100 175);
+  --chart-3: oklch(0.596 0.100 200);
+  --chart-4: oklch(0.375 0.090 252);
+  --chart-5: oklch(0.290 0.072 267);
+  /* Sidebar — medium blue */
+  --sidebar: oklch(0.375 0.090 252);           /* Medium Blue */
+  --sidebar-foreground: oklch(0.970 0.005 240);
+  --sidebar-primary: oklch(0.762 0.157 82);    /* Gold highlight */
+  --sidebar-primary-foreground: oklch(0.125 0.055 267);
+  --sidebar-accent: oklch(0.290 0.072 267);    /* Navy */
+  --sidebar-accent-foreground: oklch(0.970 0.005 240);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.596 0.100 200);
+}
+
+.dark {
+  /* Dark-mode: Dark Blue background, navy cards, teal primary */
+  --background: oklch(0.125 0.055 267);        /* Dark Blue */
+  --foreground: oklch(0.950 0.005 240);
+  --card: oklch(0.195 0.065 262);              /* between Dark & Navy */
+  --card-foreground: oklch(0.950 0.005 240);
+  --popover: oklch(0.195 0.065 262);
+  --popover-foreground: oklch(0.950 0.005 240);
+  --primary: oklch(0.596 0.100 200);           /* Teal */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.290 0.072 267);         /* Navy Blue */
+  --secondary-foreground: oklch(0.950 0.005 240);
+  --muted: oklch(0.240 0.060 265);
+  --muted-foreground: oklch(0.650 0.050 220);
+  --accent: oklch(0.762 0.157 82);             /* Yellow Gold */
+  --accent-foreground: oklch(0.125 0.055 267);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.596 0.100 200);
+  /* Charts */
+  --chart-1: oklch(0.762 0.157 82);
+  --chart-2: oklch(0.720 0.100 175);
+  --chart-3: oklch(0.596 0.100 200);
+  --chart-4: oklch(0.375 0.090 252);
+  --chart-5: oklch(0.290 0.072 267);
+  /* Sidebar — dark blue surface */
+  --sidebar: oklch(0.160 0.060 265);           /* near-Dark Blue */
+  --sidebar-foreground: oklch(0.950 0.005 240);
+  --sidebar-primary: oklch(0.762 0.157 82);    /* Gold */
+  --sidebar-primary-foreground: oklch(0.125 0.055 267);
+  --sidebar-accent: oklch(0.240 0.060 265);
+  --sidebar-accent-foreground: oklch(0.950 0.005 240);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.596 0.100 200);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+/* ── Thin scrollbars ─────────────────────────────────────────── */
+
+/* Webkit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
