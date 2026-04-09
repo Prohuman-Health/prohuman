@@ -163,7 +163,7 @@ export function EditStaffModal({ staff, onClose }: Props) {
 
                         {/* Active toggle */}
                         <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3">
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <p className="text-sm font-semibold">Account Status</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {form.is_active ? "Staff member can log in and access the system" : "Account is disabled — staff cannot log in"}
@@ -173,13 +173,13 @@ export function EditStaffModal({ staff, onClose }: Props) {
                                 type="button"
                                 onClick={() => setField("is_active", !form.is_active)}
                                 className={cn(
-                                    "relative w-11 h-6 rounded-full transition-colors shrink-0 ml-4",
+                                    "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ml-4 focus:outline-none",
                                     form.is_active ? "bg-emerald-500" : "bg-muted-foreground/30"
                                 )}
                             >
                                 <span className={cn(
-                                    "absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                                    form.is_active ? "translate-x-5" : "translate-x-0.5"
+                                    "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200",
+                                    form.is_active ? "translate-x-5" : "translate-x-0"
                                 )} />
                             </button>
                         </div>
