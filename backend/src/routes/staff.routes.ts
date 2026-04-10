@@ -16,10 +16,12 @@ export const createStaffSchema = z.object({
 const router = Router();
 router.use(authenticate, authorize("admin"));
 
-router.get(   "/",     c.listStaff);
-router.post(  "/",     validate(createStaffSchema), c.createStaff);
-router.get(   "/:id",  c.getStaff);
-router.patch( "/:id",  validate(createStaffSchema.partial()), c.updateStaff);
-router.delete("/:id",  c.deactivateStaff);
+router.get(   "/",          c.listStaff);
+router.post(  "/",          validate(createStaffSchema), c.createStaff);
+router.get(   "/:id",        c.getStaff);
+router.patch( "/:id",        validate(createStaffSchema.partial()), c.updateStaff);
+router.patch( "/:id/password", c.setStaffPassword);
+router.delete("/:id",        c.deactivateStaff);
+router.delete("/:id/revoke", c.deleteAndRevokeStaff);
 
 export default router;

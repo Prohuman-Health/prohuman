@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { sessionTypesApi, SessionType, formsApi, Form } from "@/lib/api";
 
-const DOT_COLORS = ["bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-blue-500", "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-indigo-500"];
 const PRESET_COLORS = ["#7C3AED", "#10B981", "#F59E0B", "#3B82F6", "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#EF4444", "#14B8A6"];
 
 // ── Session Type Modal ──────────────────────────────────────────────────────
@@ -251,65 +250,96 @@ export default function SessionTypesPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 {loading ? (
-                    Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44" />)
+                    Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52" />)
                 ) : filtered.length === 0 ? (
                     <div className="col-span-full bg-white rounded-2xl p-12 text-center text-muted-foreground text-sm">
                         {search ? "No session types match your search" : "No session types yet. Create your first one!"}
                     </div>
-                ) : filtered.map((t, i) => (
-                    <div key={t.id} className="bg-white rounded-2xl p-4 md:p-5 space-y-4 hover:shadow-sm transition-shadow border border-border/40">
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", !t.color && "bg-muted")}
-                                    style={t.color ? { backgroundColor: t.color + "20" } : undefined}>
-                                    <div className={cn("w-3.5 h-3.5 rounded-full", !t.color && DOT_COLORS[i % DOT_COLORS.length])}
-                                        style={t.color ? { backgroundColor: t.color } : undefined} />
+                ) : filtered.map((t, i) => {
+                    const accentColor = t.color || ["#7C3AED","#10B981","#F59E0B","#3B82F6","#EC4899","#06B6D4","#F97316","#6366F1"][i % 8];
+                    return (
+                    <div key={t.id} className="bg-white rounded-2xl overflow-hidden hover:shadow-md transition-shadow border border-border/40 flex flex-col">
+                        {/* Color accent bar */}
+                        <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: accentColor }} />
+
+                        <div className="p-4 md:p-5 flex flex-col gap-3 flex-1">
+                            {/* Header */}
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                                        style={{ backgroundColor: accentColor }}>
+                                        {t.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-sm leading-tight truncate">{t.name}</p>
+                                        <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 py-0 font-medium mt-0.5",
+                                            t.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
+                                            {t.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                    </div>
                                 </div>
-                                <p className="font-semibold text-sm leading-tight">{t.name}</p>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                    <button onClick={() => { setEditing(t); setModalOpen(true); }}
+                                        className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => setDeleting(t)}
+                                        className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                                <button onClick={() => { setEditing(t); setModalOpen(true); }}
-                                    className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
-                                    <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => setDeleting(t)}
-                                    className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        </div>
 
-                        {t.description && (
-                            <p className="text-xs text-muted-foreground -mt-2 leading-relaxed line-clamp-2">{t.description}</p>
-                        )}
-
-                        <div className="bg-muted/50 rounded-xl p-3 space-y-2">
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />Duration</span>
-                                <span className="font-semibold">{t.default_duration_minutes} min</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground flex items-center gap-1"><IndianRupee className="w-3 h-3" />Fee</span>
-                                <span className="font-semibold">₹{t.fee.toLocaleString("en-IN")}</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium",
-                                t.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
-                                {t.is_active ? "Active" : "Inactive"}
-                            </Badge>
-                            {t.form_id ? (
-                                <span className="flex items-center gap-1 text-[11px] text-blue-600 font-medium">
-                                    <FileText className="w-3 h-3" />
-                                    {t.form_title ?? "Form linked"}
-                                </span>
+                            {/* Description */}
+                            {t.description ? (
+                                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{t.description}</p>
                             ) : (
-                                <span className="text-[11px] text-muted-foreground">No form</span>
+                                <p className="text-xs text-muted-foreground/40 italic">No description</p>
                             )}
+
+                            {/* Stats row */}
+                            <div className="grid grid-cols-2 gap-2 mt-auto">
+                                <div className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ backgroundColor: accentColor + "10" }}>
+                                    <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />Duration
+                                    </span>
+                                    <span className="text-base font-bold leading-tight" style={{ color: accentColor }}>
+                                        {t.default_duration_minutes}
+                                        <span className="text-xs font-semibold ml-0.5 text-muted-foreground">min</span>
+                                    </span>
+                                </div>
+                                <div className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ backgroundColor: accentColor + "10" }}>
+                                    <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+                                        <IndianRupee className="w-3 h-3" />Fee
+                                    </span>
+                                    <span className="text-base font-bold leading-tight" style={{ color: accentColor }}>
+                                        {t.fee === 0 ? (
+                                            <span className="text-sm text-muted-foreground font-semibold">Free</span>
+                                        ) : (
+                                            <>₹{t.fee.toLocaleString("en-IN")}</>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Form pill */}
+                            <div className="pt-1 border-t border-border/50">
+                                {t.form_id ? (
+                                    <div className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 w-fit max-w-full">
+                                        <FileText className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{t.form_title ?? "Form linked"}</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 px-2.5 py-1.5">
+                                        <FileText className="w-3 h-3 shrink-0" />
+                                        No intake form
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-                ))}
+                    );
+                })}
             </div>
 
             <SessionTypeModal open={modalOpen} initial={editing} onClose={() => setModalOpen(false)} onSaved={load} />

@@ -17,6 +17,9 @@ export const staffApi = {
         request<StaffMember>(`/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     deactivate: (id: string) =>
         request<null>(`/staff/${id}`, { method: "DELETE" }),
+    /** Admin-set password for another staff member (no current password required). */
+    setPassword: (id: string, password: string) =>
+        request<null>(`/staff/${id}/password`, { method: "PATCH", body: JSON.stringify({ password }) }),
     /** Hard-delete the user account and revoke all active sessions immediately. */
     deleteAndRevoke: (id: string) =>
         request<null>(`/staff/${id}/revoke`, { method: "DELETE" }),

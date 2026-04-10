@@ -77,7 +77,50 @@ export const updateStaff = asyncHandler(async (req: Request, res: Response) => {
   ApiResponse.ok(res, result.rows[0]);
 });
 
+export const setStaffPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { password } = req.body;
+  if (!password || typeof password !== "string" || password.length < 8)
+    throw ApiError.badRequest("Password must be at least 8 characters");
+
+  const existing = await query("SELECT id FROM staff WHERE id = $1", [req.params.id]);
+  if (!existing.rows[0]) throw ApiError.notFound("Staff not found");
+
+  const hash = await bcrypt.hash(password, 12);
+  await query("UPDATE staff SET password_hash = $1, updated_at = NOW() WHERE id = $2", [hash, req.params.id]);
+  ApiResponse.ok(res, null, "Password updated");
+});
+
 export const deactivateStaff = asyncHandler(async (req: Request, res: Response) => {
   await query("UPDATE staff SET is_active = FALSE, updated_at = NOW() WHERE id = $1", [req.params.id]);
+  ApiResponse.noContent(res);
+});
+
+export const deleteAndRevokeStaff = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  // Prevent self-deletion
+  if (req.user!.sub === id) throw ApiError.badRequest("You cannot delete your own account");
+
+  const existing = await query("SELECT id FROM staff WHERE id = $1", [id]);
+  if (!existing.rows[0]) throw ApiError.notFound("Staff not found");
+
+  // Check for blocking FK references (NOT NULL columns that can't be set to NULL)
+  const blocking = await query(
+    `SELECT
+       (SELECT COUNT(*) FROM sessions        WHERE created_by  = $1)::int AS sessions,
+       (SELECT COUNT(*) FROM session_history WHERE changed_by  = $1)::int AS session_history,
+       (SELECT COUNT(*) FROM documents       WHERE uploaded_by = $1)::int AS documents`,
+    [id]
+  );
+  const { sessions, session_history, documents } = blocking.rows[0];
+  if (sessions > 0 || session_history > 0 || documents > 0) {
+    throw ApiError.badRequest(
+      "Cannot permanently delete this staff member because they have existing records " +
+      `(${sessions} session(s), ${session_history} session history entries, ${documents} document(s)). ` +
+      "Deactivate the account instead to revoke login access."
+    );
+  }
+
+  await query("DELETE FROM staff WHERE id = $1", [id]);
   ApiResponse.noContent(res);
 });
