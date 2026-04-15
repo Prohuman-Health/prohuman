@@ -26,7 +26,7 @@ export function NewPatientModal({ open, onClose }: Props) {
     const [form, setForm] = useState({
         full_name: "", phone: "", email: "",
         date_of_birth: "", gender: "Male" as typeof GENDERS[number],
-        complaints: "",
+        complaints: "", reference: "",
     });
 
     const calculatedAge = useMemo(() => {
@@ -72,13 +72,14 @@ export function NewPatientModal({ open, onClose }: Props) {
                 age: calculatedAge!,
                 gender: form.gender,
                 complaints: form.complaints.trim(),
+                ...(form.reference.trim() ? { reference: form.reference.trim() } : {}),
                 ...(user?.branch_id ? { branch_id: user.branch_id } : {}),
             });
             await refresh();
             setSuccess(true);
             setTimeout(() => {
                 setSuccess(false);
-                setForm({ full_name: "", phone: "", email: "", date_of_birth: "", gender: "Male", complaints: "" });
+                setForm({ full_name: "", phone: "", email: "", date_of_birth: "", gender: "Male", complaints: "", reference: "" });
                 onClose();
             }, 1200);
         } catch (err: unknown) {
@@ -87,7 +88,7 @@ export function NewPatientModal({ open, onClose }: Props) {
     }
 
     function reset() {
-        setForm({ full_name: "", phone: "", email: "", date_of_birth: "", gender: "Male", complaints: "" });
+        setForm({ full_name: "", phone: "", email: "", date_of_birth: "", gender: "Male", complaints: "", reference: "" });
         setErrors({}); setApiError(null); setSuccess(false);
         onClose();
     }
@@ -181,6 +182,12 @@ export function NewPatientModal({ open, onClose }: Props) {
                                 placeholder="Describe the patient's primary complaints..."
                                 className={cn("w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground",
                                     errors.complaints && "border-red-400")} />
+                        </Field>
+
+                        <Field label="Patient Reference" aside="optional">
+                            <textarea value={form.reference} onChange={set("reference")} rows={2}
+                                placeholder="e.g. Referred by Dr. Sharma · Walk-in · Google ads..."
+                                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
                         </Field>
                     </div>
 

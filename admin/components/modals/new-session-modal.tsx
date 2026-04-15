@@ -21,7 +21,7 @@ interface Props {
 export function NewSessionModal({ open, onClose, prefill }: Props) {
     const { patients } = usePatients();
     const { doctors } = useStaff();
-    const { sessionTypes } = useSessionTypes();
+    const { sessionTypes, refresh: refreshSessionTypes } = useSessionTypes();
     const { refresh } = useSessions();
     const { user } = useAuth();
 
@@ -38,6 +38,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [form, setForm] = useState({
         patient_id: prefill?.patientId ?? "",
         doctor_id: prefill?.doctorId ?? "",
+        assisting_doctor_id: "",
         session_type_id: "",
         date: prefill?.date ?? todayStr,
         time: "09:00",
@@ -50,6 +51,8 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!open) return;
         // Reset success/error on open
         setErrors({}); setApiError(null); setSuccess(false);
+        // Force-refresh session types so newly added types appear
+        refreshSessionTypes();
         // Apply prefill values (including date) on each open
         setForm(prev => ({
             ...prev,
@@ -70,7 +73,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                 .catch(() => {/* silent */ })
                 .finally(() => setBranchesLoading(false));
         }
-    }, [open, user?.branch_id, prefill?.date, prefill?.patientId, prefill?.doctorId]);
+    }, [open, user?.branch_id, prefill?.date, prefill?.patientId, prefill?.doctorId, refreshSessionTypes]);
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -100,6 +103,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
             await sessionsApi.create({
                 patient_id: form.patient_id,
                 doctor_id: form.doctor_id,
+                ...(form.assisting_doctor_id ? { assisting_doctor_id: form.assisting_doctor_id } : {}),
                 session_type_id: form.session_type_id,
                 branch_id: form.branch_id,
                 scheduled_at,
@@ -110,7 +114,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
             setSuccess(true);
             setTimeout(() => {
                 setSuccess(false);
-                setForm({ patient_id: "", doctor_id: "", session_type_id: "", date: todayStr, time: "09:00", notes: "", branch_id: user?.branch_id ?? "" });
+                setForm({ patient_id: "", doctor_id: "", assisting_doctor_id: "", session_type_id: "", date: todayStr, time: "09:00", notes: "", branch_id: user?.branch_id ?? "" });
                 onClose();
             }, 1200);
         } catch (err: unknown) {
@@ -189,14 +193,23 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                             </select>
                         </Field>
 
-                        <Field label="Doctor" required error={errors.doctor_id}>
-                            <select value={form.doctor_id} onChange={set("doctor_id")}
-                                className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                    errors.doctor_id && "border-red-400")}>
-                                <option value="">Select doctor…</option>
-                                {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</option>)}
-                            </select>
-                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Doctor" required error={errors.doctor_id}>
+                                <select value={form.doctor_id} onChange={set("doctor_id")}
+                                    className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
+                                        errors.doctor_id && "border-red-400")}>
+                                    <option value="">Select doctor…</option>
+                                    {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</option>)}
+                                </select>
+                            </Field>
+                            <Field label="Assisting Doctor">
+                                <select value={form.assisting_doctor_id} onChange={set("assisting_doctor_id")}
+                                    className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
+                                    <option value="">None</option>
+                                    {doctors.filter(d => d.id !== form.doctor_id).map(d => <option key={d.id} value={d.id}>{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</option>)}
+                                </select>
+                            </Field>
+                        </div>
 
                         <Field label="Session Type" required error={errors.session_type_id}>
                             <select value={form.session_type_id} onChange={set("session_type_id")}

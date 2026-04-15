@@ -4,6 +4,7 @@ export interface Session {
     id: string; scheduled_at: string; duration_minutes: number; status: string;
     patient_name: string; patient_code: string; patient_id: string;
     doctor_name: string; doctor_id: string;
+    assisting_doctor_id?: string | null; assisting_doctor_name?: string | null;
     session_type_name: string; session_type_id: string;
     form_id?: string | null;
     branch_name: string; branch_id: string;

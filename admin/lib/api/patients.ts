@@ -2,8 +2,8 @@ import { request } from "./core";
 
 export interface Patient {
     id: string; patient_code: string; full_name: string;
-    age: number; gender: string; phone: string; email: string | null;
-    complaints: string; is_active: boolean; created_at: string;
+    age: number; date_of_birth?: string | null; gender: string; phone: string; email: string | null;
+    complaints: string; reference?: string | null; is_active: boolean; created_at: string;
     branch_id: string | null;
 }
 export interface PatientListResponse { patients: Patient[]; total: number; page: number; limit: number; }
