@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { X, Loader2, User, Mail, Hash, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useState, useRef, useMemo } from "react";
+import { X, Loader2, User, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput, validatePhone } from "@/components/ui/phone-input";
@@ -25,9 +25,20 @@ export function NewPatientModal({ open, onClose }: Props) {
 
     const [form, setForm] = useState({
         full_name: "", phone: "", email: "",
-        age: "", gender: "Male" as typeof GENDERS[number],
+        date_of_birth: "", gender: "Male" as typeof GENDERS[number],
         complaints: "",
     });
+
+    const calculatedAge = useMemo(() => {
+        if (!form.date_of_birth) return null;
+        const dob = new Date(form.date_of_birth);
+        if (isNaN(dob.getTime())) return null;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+        return age >= 0 ? age : null;
+    }, [form.date_of_birth]);
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -41,9 +52,8 @@ export function NewPatientModal({ open, onClose }: Props) {
         const phoneErr = validatePhone(form.phone);
         if (phoneErr) errs.phone = phoneErr;
         if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = "Enter a valid email address";
-        const age = parseInt(form.age);
-        if (!form.age) errs.age = "Age is required";
-        else if (isNaN(age) || age < 1 || age > 130) errs.age = "Age must be between 1 and 130";
+        if (!form.date_of_birth) errs.date_of_birth = "Date of birth is required";
+        else if (calculatedAge === null || calculatedAge < 0 || calculatedAge > 130) errs.date_of_birth = "Enter a valid date of birth";
         if (!form.complaints.trim()) errs.complaints = "Chief complaints are required";
         setErrors(errs);
         return Object.keys(errs).length === 0;
@@ -58,7 +68,8 @@ export function NewPatientModal({ open, onClose }: Props) {
                 full_name: form.full_name.trim(),
                 phone: form.phone.trim(),
                 ...(form.email.trim() ? { email: form.email.trim() } : {}),
-                age: parseInt(form.age),
+                date_of_birth: form.date_of_birth,
+                age: calculatedAge!,
                 gender: form.gender,
                 complaints: form.complaints.trim(),
                 ...(user?.branch_id ? { branch_id: user.branch_id } : {}),
@@ -67,7 +78,7 @@ export function NewPatientModal({ open, onClose }: Props) {
             setSuccess(true);
             setTimeout(() => {
                 setSuccess(false);
-                setForm({ full_name: "", phone: "", email: "", age: "", gender: "Male", complaints: "" });
+                setForm({ full_name: "", phone: "", email: "", date_of_birth: "", gender: "Male", complaints: "" });
                 onClose();
             }, 1200);
         } catch (err: unknown) {
@@ -76,7 +87,7 @@ export function NewPatientModal({ open, onClose }: Props) {
     }
 
     function reset() {
-        setForm({ full_name: "", phone: "", email: "", age: "", gender: "Male", complaints: "" });
+        setForm({ full_name: "", phone: "", email: "", date_of_birth: "", gender: "Male", complaints: "" });
         setErrors({}); setApiError(null); setSuccess(false);
         onClose();
     }
@@ -123,22 +134,31 @@ export function NewPatientModal({ open, onClose }: Props) {
                             </div>
                         </Field>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Phone" required error={errors.phone}>
-                                <PhoneInput
-                                    value={form.phone}
-                                    onChange={v => { setForm(prev => ({ ...prev, phone: v })); setErrors(prev => { const n = { ...prev }; delete n.phone; return n; }); }}
-                                    error={errors.phone}
-                                />
-                            </Field>
-                            <Field label="Age" required error={errors.age}>
-                                <div className="relative">
-                                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                                    <Input type="number" min={1} max={130} className={cn("pl-9 rounded-xl", errors.age && "border-red-400")}
-                                        placeholder="28" value={form.age} onChange={set("age")} />
-                                </div>
-                            </Field>
-                        </div>
+                        <Field label="Phone" required error={errors.phone}>
+                            <PhoneInput
+                                value={form.phone}
+                                onChange={v => { setForm(prev => ({ ...prev, phone: v })); setErrors(prev => { const n = { ...prev }; delete n.phone; return n; }); }}
+                                error={errors.phone}
+                            />
+                        </Field>
+
+                        <Field
+                            label="Date of Birth"
+                            required
+                            error={errors.date_of_birth}
+                            aside={calculatedAge !== null ? `${calculatedAge} yrs` : undefined}
+                        >
+                            <Input
+                                type="date"
+                                max={new Date().toISOString().slice(0, 10)}
+                                className={cn("rounded-xl", errors.date_of_birth && "border-red-400")}
+                                value={form.date_of_birth}
+                                onChange={e => {
+                                    setForm(prev => ({ ...prev, date_of_birth: e.target.value }));
+                                    setErrors(prev => { const n = { ...prev }; delete n.date_of_birth; return n; });
+                                }}
+                            />
+                        </Field>
 
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Email" error={errors.email}>
@@ -177,12 +197,15 @@ export function NewPatientModal({ open, onClose }: Props) {
     );
 }
 
-function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
+function Field({ label, required, error, aside, children }: { label: string; required?: boolean; error?: string; aside?: string; children: React.ReactNode }) {
     return (
         <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-            </label>
+            <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">
+                    {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                </label>
+                {aside && <span className="text-xs font-semibold text-[#2493A2]">{aside}</span>}
+            </div>
             {children}
             {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
         </div>

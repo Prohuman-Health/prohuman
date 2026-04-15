@@ -94,7 +94,7 @@ function OptionChipsInput({ chips, onChange, hasError }: { chips: string[]; onCh
 // ── Question form state ───────────────────────────────────────────────────────
 interface QForm {
     text: string;
-    section: Section;
+    section: Section | "";
     answer_type: QuestionAnswerType;
     options: string[];
     scale_min: string;
@@ -105,7 +105,7 @@ interface QForm {
 }
 
 function emptyForm(): QForm {
-    return { text: "", section: "Intake", answer_type: "free_text", options: [], scale_min: "0", scale_max: "10", treatment_tags: [], body_regions: [], is_active: true };
+    return { text: "", section: "", answer_type: "free_text", options: [], scale_min: "0", scale_max: "10", treatment_tags: [], body_regions: [], is_active: true };
 }
 
 function validateForm(f: QForm): Record<string, string> {
@@ -168,8 +168,8 @@ function QuestionModal({
                 options: form.answer_type === "multiple_choice" ? form.options : undefined,
                 scale_min: form.answer_type === "scale" ? parseInt(form.scale_min) : undefined,
                 scale_max: form.answer_type === "scale" ? parseInt(form.scale_max) : undefined,
-                category: form.section,
-                tags: [form.section],
+                category: form.section || undefined,
+                tags: form.section ? [form.section] : [],
                 treatment_tags: form.treatment_tags,
                 body_regions: form.body_regions,
                 is_active: form.is_active,
@@ -201,17 +201,6 @@ function QuestionModal({
                             <AlertCircle className="w-4 h-4 shrink-0" />{apiError}
                         </div>
                     )}
-
-                    {/* Section */}
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-semibold">Section / Category</label>
-                        <select
-                            value={form.section}
-                            onChange={e => update({ section: e.target.value as Section })}
-                            className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
-                            {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                    </div>
 
                     {/* Answer type */}
                     <div className="space-y-1.5">
@@ -250,6 +239,20 @@ function QuestionModal({
                             )}
                         />
                         {errors.text && <p className="text-[11px] text-red-500">{errors.text}</p>}
+                    </div>
+
+                    {/* Section */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold">Section / Category
+                            <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                        </label>
+                        <select
+                            value={form.section}
+                            onChange={e => update({ section: e.target.value as Section | "" })}
+                            className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
+                            <option value="">— No section —</option>
+                            {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
                     </div>
 
                     {/* Multiple choice options */}
