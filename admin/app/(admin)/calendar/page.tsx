@@ -359,8 +359,7 @@ export default function CalendarPage() {
                                 const isSelected = day === selectedDay;
                                 return (
                                     <div key={day}
-                                        onClick={() => { setSelectedDay(day === selectedDay ? null : day); }}
-                                        onDoubleClick={() => { setSelectedDay(day); setViewMode("day"); }}
+                                        onClick={() => { setSelectedDay(day); setViewMode("day"); }}
                                         className={cn("rounded-xl p-1.5 cursor-pointer transition-all min-h-[80px] flex flex-col group relative",
                                             isSelected ? "bg-foreground text-white" : "hover:bg-muted/40")}>
                                         <span className={cn("text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full mb-1",

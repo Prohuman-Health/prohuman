@@ -11,6 +11,7 @@ export const sessionTypeSchema = z.object({
   fee:                      z.number().min(0),
   form_id:                  z.string().uuid().optional().nullable(),
   is_active:                z.boolean().optional().default(true),
+  color:                    z.string().nullable().optional(),
 });
 
 const router = Router();

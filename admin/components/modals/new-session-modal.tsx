@@ -50,8 +50,14 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!open) return;
         // Reset success/error on open
         setErrors({}); setApiError(null); setSuccess(false);
-        // Pre-fill branch from user if available
-        setForm(prev => ({ ...prev, branch_id: user?.branch_id ?? "" }));
+        // Apply prefill values (including date) on each open
+        setForm(prev => ({
+            ...prev,
+            patient_id: prefill?.patientId ?? prev.patient_id,
+            doctor_id: prefill?.doctorId ?? prev.doctor_id,
+            date: prefill?.date ?? todayStr,
+            branch_id: user?.branch_id ?? prev.branch_id,
+        }));
 
         if (!user?.branch_id) {
             setBranchesLoading(true);
@@ -64,7 +70,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                 .catch(() => {/* silent */ })
                 .finally(() => setBranchesLoading(false));
         }
-    }, [open, user?.branch_id]);
+    }, [open, user?.branch_id, prefill?.date, prefill?.patientId, prefill?.doctorId]);
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
