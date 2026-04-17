@@ -334,6 +334,12 @@ declare global {
     interface User extends JwtPayload { }
     interface Request {
       user?: JwtPayload;
+      file?: {
+        filename: string;
+        originalname: string;
+        mimetype: string;
+        size: number;
+      };
     }
   }
 }

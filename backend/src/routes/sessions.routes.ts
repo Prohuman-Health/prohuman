@@ -51,8 +51,8 @@ const FORM_UPLOAD_DIR = path.join(process.cwd(), "uploads", "session-forms");
 if (!fs.existsSync(FORM_UPLOAD_DIR)) fs.mkdirSync(FORM_UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, FORM_UPLOAD_DIR),
-  filename: (_req, file, cb) => {
+  destination: (_req: unknown, _file: unknown, cb: (error: Error | null, destination: string) => void) => cb(null, FORM_UPLOAD_DIR),
+  filename: (_req: unknown, file: { originalname: string }, cb: (error: Error | null, filename: string) => void) => {
     const clean = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
     cb(null, `${Date.now()}-${clean}`);
   },
@@ -71,7 +71,7 @@ const allowedMimeExact = new Set([
 const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: unknown, file: { mimetype: string }, cb: (error: Error | null, acceptFile?: boolean) => void) => {
     const ok = allowedMimePrefixes.some(prefix => file.mimetype.startsWith(prefix)) || allowedMimeExact.has(file.mimetype);
     cb(ok ? null : new Error("Unsupported file type"), ok);
   },

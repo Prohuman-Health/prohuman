@@ -14,6 +14,9 @@ import { Strategy as GoogleStrategy, Profile } from "passport-google-oauth20";
 import { env } from "./env";
 import { query } from "./db";
 
+type VerifyDone = (err: Error | null, user?: Express.User | false) => void;
+type SessionDone = (err: Error | null, user?: Express.User) => void;
+
 passport.use(
     new GoogleStrategy(
         {
@@ -22,7 +25,7 @@ passport.use(
             callbackURL: env.GOOGLE_CALLBACK_URL,
             scope: ["profile", "email"],
         },
-        async (_accessToken, _refreshToken, profile: Profile, done) => {
+        async (_accessToken: string, _refreshToken: string, profile: Profile, done: VerifyDone) => {
             try {
                 const email = profile.emails?.[0]?.value;
                 const googleId = profile.id;
@@ -77,7 +80,7 @@ passport.use(
 
 // Passport doesn't actually use sessions (we use JWT),
 // but these stubs are required by passport internals:
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((user, done) => done(null, user as Express.User));
+passport.serializeUser((user: Express.User, done: SessionDone) => done(null, user));
+passport.deserializeUser((user: Express.User, done: SessionDone) => done(null, user));
 
 export default passport;
