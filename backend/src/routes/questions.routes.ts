@@ -6,11 +6,15 @@ import { z } from "zod";
 
 export const questionSchema = z.object({
   text:        z.string().min(1),
-  answer_type: z.enum(["free_text","yes_no","scale","multiple_choice"]),
+  answer_type: z.enum(["free_text","yes_no","scale","multiple_choice","file_upload"]),
   options:     z.array(z.string()).optional(),
   scale_min:   z.number().int().optional(),
   scale_max:   z.number().int().optional(),
   tags:        z.array(z.string()).optional().default([]),
+  category:    z.string().optional(),
+  treatment_tags: z.array(z.string()).optional(),
+  body_regions: z.array(z.string()).optional(),
+  is_active: z.boolean().optional(),
 });
 
 const questionRefinedSchema = questionSchema.refine(d => {

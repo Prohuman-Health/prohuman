@@ -1,4 +1,6 @@
-import { request } from "./core";
+import { ApiError, clearToken, getToken, request } from "./core";
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1";
 
 export interface Session {
     id: string; scheduled_at: string; duration_minutes: number; status: string;
@@ -17,6 +19,13 @@ export interface SessionFormQuestion {
     id: string; text: string; answer_type: string;
     options: string[] | null; scale_min: number | null; scale_max: number | null;
     is_required: boolean; order_index: number;
+}
+
+export interface SessionFormUploadResult {
+    file_name: string;
+    file_type: string;
+    file_size: number;
+    file_url: string;
 }
 
 export interface SessionFormResponse {
@@ -51,6 +60,28 @@ export const sessionsApi = {
         request<null>(`/sessions/${id}/attendance`, { method: "PATCH", body: JSON.stringify({ attendance }) }),
     // Form
     getForm: (id: string) => request<SessionFormData>(`/sessions/${id}/form`),
+    uploadFormFile: async (id: string, file: File) => {
+        const token = getToken();
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch(`${BASE}/sessions/${id}/form-upload`, {
+            method: "POST",
+            headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: formData,
+        });
+
+        if (res.status === 401) {
+            clearToken();
+            throw new ApiError(401, "Unauthorized");
+        }
+
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new ApiError(res.status, body?.message ?? "Upload failed");
+        return (body?.data ?? body) as SessionFormUploadResult;
+    },
     submitForm: (id: string, answers: SessionFormAnswer[]) =>
         request<null>(`/sessions/${id}/form`, { method: "POST", body: JSON.stringify(answers) }),
     updateForm: (id: string, answers: SessionFormAnswer[]) =>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
 import {
     Plus, Search, Pencil, Eye, Copy, Trash2, GripVertical, X,
     FileText, Loader2, RefreshCw, AlertCircle, CheckCircle2,
-    Type, ToggleLeft, List, Scale, BookOpen,
+    Type, ToggleLeft, List, Scale, BookOpen, Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ const ANSWER_TYPE_META: Record<QuestionAnswerType, { icon: React.ElementType; la
     yes_no: { icon: ToggleLeft, label: "Yes / No", hint: "Boolean yes or no" },
     scale: { icon: Scale, label: "Scale", hint: "Numeric rating (requires min/max)" },
     multiple_choice: { icon: List, label: "Multiple Choice", hint: "Select from options (min 2 options)" },
+    file_upload: { icon: Paperclip, label: "File Upload", hint: "Photos, videos, or documents" },
 };
 
 const ANSWER_TYPES = Object.keys(ANSWER_TYPE_META) as QuestionAnswerType[];
@@ -149,6 +150,11 @@ function PreviewModal({ formId, title, onClose }: { formId: string; title: strin
                                                 {opt}
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+                                {q.answer_type === "file_upload" && (
+                                    <div className="h-10 rounded-xl border border-dashed border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center">
+                                        Upload photos, videos, or documents
                                     </div>
                                 )}
                             </div>
@@ -450,6 +456,9 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
                                                 )}
                                                 {q.answer_type === "free_text" && (
                                                     <p className="text-[10px] text-muted-foreground">Patients can type any free-form answer</p>
+                                                )}
+                                                {q.answer_type === "file_upload" && (
+                                                    <p className="text-[10px] text-muted-foreground">Patients can upload photos, videos, and documents</p>
                                                 )}
                                             </div>
 

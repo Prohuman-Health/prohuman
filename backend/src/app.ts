@@ -1,4 +1,6 @@
 import express from "express";
+import fs from "fs";
+import path from "path";
 import helmet from "helmet";
 import cors from "cors";
 import compression from "compression";
@@ -52,6 +54,11 @@ app.get("/health", (_req, res) => res.json({ status: "ok", env: env.NODE_ENV }))
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use("/api/v1", routes);
+
+// ── Static uploads ────────────────────────────────────────────────────────────
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 // ── Error handling ────────────────────────────────────────────────────────────
 app.use(notFoundHandler);

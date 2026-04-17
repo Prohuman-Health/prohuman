@@ -3,6 +3,9 @@ import * as c from "../controllers/sessions.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { z } from "zod";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 
 export const createSessionSchema = z.object({
   patient_id: z.string().uuid(),
@@ -44,6 +47,36 @@ export const formResponseSchema = z.array(z.object({
   answer_options: z.array(z.string()).optional(),
 }));
 
+const FORM_UPLOAD_DIR = path.join(process.cwd(), "uploads", "session-forms");
+if (!fs.existsSync(FORM_UPLOAD_DIR)) fs.mkdirSync(FORM_UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, FORM_UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const clean = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    cb(null, `${Date.now()}-${clean}`);
+  },
+});
+
+const allowedMimePrefixes = ["image/", "video/"];
+const allowedMimeExact = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+]);
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = allowedMimePrefixes.some(prefix => file.mimetype.startsWith(prefix)) || allowedMimeExact.has(file.mimetype);
+    cb(ok ? null : new Error("Unsupported file type"), ok);
+  },
+});
+
 const router = Router();
 router.use(authenticate);
 
@@ -54,6 +87,7 @@ router.patch("/:id/cancel", validate(cancelSchema), c.cancelSession);
 router.patch("/:id/reschedule", validate(rescheduleSchema), c.rescheduleSession);
 router.patch("/:id/attendance", validate(attendanceSchema), c.markAttendance);
 router.get("/:id/form", c.getSessionForm);
+router.post("/:id/form-upload", upload.single("file"), c.uploadSessionFormFile);
 router.post("/:id/form", validate(formResponseSchema), c.submitSessionForm);
 router.patch("/:id/form", validate(formResponseSchema), c.updateSessionForm);
 

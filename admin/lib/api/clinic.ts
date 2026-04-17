@@ -30,7 +30,7 @@ export const settingsApi = {
 
 // ── Questions (reusable question bank) ────────────────────────────────────────
 // Must match backend Zod enum exactly
-export type QuestionAnswerType = "free_text" | "yes_no" | "scale" | "multiple_choice";
+export type QuestionAnswerType = "free_text" | "yes_no" | "scale" | "multiple_choice" | "file_upload";
 
 export interface Question {
     id: string;
@@ -40,7 +40,7 @@ export interface Question {
     scale_min: number | undefined;   // only for scale
     scale_max: number | undefined;   // only for scale
     tags: string[];                  // freeform custom tags
-    category: string;                // primary section (Intake, Assessment, etc.)
+    category: string | null;         // primary section (Intake, Assessment, etc.)
     treatment_tags: string[];        // treatment type tags (Physiotherapy, Massage, etc.)
     body_regions: string[];          // body area tags (Knee, Shoulder, Spine, etc.)
     is_active: boolean;

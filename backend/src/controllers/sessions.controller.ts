@@ -346,6 +346,44 @@ export const getSessionForm = asyncHandler(async (req: Request, res: Response) =
   ApiResponse.ok(res, { form_id, questions: form.rows, responses: responses.rows });
 });
 
+export const uploadSessionFormFile = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.file) throw ApiError.badRequest("No file uploaded");
+
+  const session = await query(
+    `SELECT s.id, s.patient_id, st.form_id
+     FROM sessions s
+     JOIN session_types st ON st.id = s.session_type_id
+     WHERE s.id = $1`,
+    [req.params.id]
+  );
+  if (!session.rows[0]) throw ApiError.notFound("Session not found");
+  if (!session.rows[0].form_id) throw ApiError.badRequest("No form linked to this session type");
+
+  const relPath = `/uploads/session-forms/${req.file.filename}`;
+  const fileUrl = `${req.protocol}://${req.get("host")}${relPath}`;
+
+  await query(
+    `INSERT INTO documents (patient_id, session_id, file_name, file_url, file_type, category, uploaded_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [
+      session.rows[0].patient_id,
+      req.params.id,
+      req.file.originalname,
+      fileUrl,
+      req.file.mimetype,
+      "session_form_attachment",
+      req.user!.sub,
+    ]
+  );
+
+  ApiResponse.created(res, {
+    file_name: req.file.originalname,
+    file_type: req.file.mimetype,
+    file_size: req.file.size,
+    file_url: fileUrl,
+  });
+});
+
 export const submitSessionForm = asyncHandler(async (req: Request, res: Response) => {
   const answers: Array<{ question_id: string; answer_text?: string; answer_value?: number; answer_options?: string[] }> = req.body;
   const session = await query(

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
     Search, RefreshCw, CalendarDays, X, Loader2, FileText,
     CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
-    ClipboardList, UserX, ChevronDown,
+    ClipboardList, UserX, ChevronDown, Paperclip, Upload,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ function SessionFormModal({ sessionId, sessionTitle, onClose }: {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [uploadingQid, setUploadingQid] = useState<string | null>(null);
     // Answers keyed by question_id
     const [answers, setAnswers] = useState<Record<string, SessionFormAnswer>>({});
 
@@ -87,6 +88,30 @@ function SessionFormModal({ sessionId, sessionTitle, onClose }: {
 
     function setAnswer(qid: string, patch: Partial<SessionFormAnswer>) {
         setAnswers(prev => ({ ...prev, [qid]: { ...prev[qid], question_id: qid, ...patch } }));
+    }
+
+    async function uploadFiles(questionId: string, files: FileList | null) {
+        if (!files || files.length === 0) return;
+        setError(null);
+        try {
+            setUploadingQid(questionId);
+            const uploadedUrls: string[] = [];
+            for (const file of Array.from(files)) {
+                const out = await sessionsApi.uploadFormFile(sessionId, file);
+                uploadedUrls.push(out.file_url);
+            }
+
+            const cur = answers[questionId]?.answer_options ?? [];
+            const merged = [...cur];
+            for (const url of uploadedUrls) {
+                if (!merged.includes(url)) merged.push(url);
+            }
+            setAnswer(questionId, { answer_options: merged });
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to upload file");
+        } finally {
+            setUploadingQid(null);
+        }
     }
 
     return (
@@ -235,6 +260,50 @@ function SessionFormModal({ sessionId, sessionTitle, onClose }: {
                                                         </button>
                                                     );
                                                 })}
+                                            </div>
+                                        )}
+
+                                        {/* file_upload */}
+                                        {q.answer_type === "file_upload" && (
+                                            <div className="space-y-2">
+                                                <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-input hover:border-foreground/40 cursor-pointer text-sm text-muted-foreground">
+                                                    <Upload className="w-4 h-4" />
+                                                    {uploadingQid === q.id ? "Uploading..." : "Upload photos, videos, or documents"}
+                                                    <input
+                                                        type="file"
+                                                        className="hidden"
+                                                        multiple
+                                                        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                                                        onChange={e => {
+                                                            uploadFiles(q.id, e.target.files);
+                                                            e.currentTarget.value = "";
+                                                        }}
+                                                        disabled={uploadingQid === q.id}
+                                                    />
+                                                </label>
+
+                                                {(ans.answer_options ?? []).length > 0 && (
+                                                    <div className="space-y-1.5">
+                                                        {(ans.answer_options ?? []).map((url) => {
+                                                            const fileName = decodeURIComponent(url.split("/").pop() ?? "attachment");
+                                                            return (
+                                                                <div key={url} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-input bg-background">
+                                                                    <a href={url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:text-blue-700 truncate flex items-center gap-1.5">
+                                                                        <Paperclip className="w-3 h-3 shrink-0" />
+                                                                        {fileName}
+                                                                    </a>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-[11px] text-red-500 hover:text-red-600"
+                                                                        onClick={() => setAnswer(q.id, { answer_options: (ans.answer_options ?? []).filter(u => u !== url) })}
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

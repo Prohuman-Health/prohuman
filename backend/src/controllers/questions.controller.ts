@@ -30,6 +30,7 @@ export const getQuestion = asyncHandler(async (req: Request, res: Response) => {
 
 export const createQuestion = asyncHandler(async (req: Request, res: Response) => {
   const { text, answer_type, options, scale_min, scale_max, tags, category, treatment_tags, body_regions } = req.body;
+  const normalizedCategory = typeof category === "string" ? category.trim() : category;
   const result = await query(
     `INSERT INTO questions (text, answer_type, options, scale_min, scale_max, tags, category, treatment_tags, body_regions)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
@@ -38,7 +39,7 @@ export const createQuestion = asyncHandler(async (req: Request, res: Response) =
       options ? JSON.stringify(options) : null,
       scale_min ?? null, scale_max ?? null,
       tags ?? [],
-      category ?? "General",
+      normalizedCategory ? normalizedCategory : null,
       treatment_tags ?? [],
       body_regions ?? [],
     ]
@@ -52,7 +53,14 @@ export const updateQuestion = asyncHandler(async (req: Request, res: Response) =
   for (const [k, v] of Object.entries(req.body)) {
     if (allowed.includes(k)) {
       sets.push(`${k} = $${i++}`);
-      vals.push(k === "options" ? JSON.stringify(v) : v);
+      if (k === "options") {
+        vals.push(JSON.stringify(v));
+      } else if (k === "category" && typeof v === "string") {
+        const trimmed = v.trim();
+        vals.push(trimmed.length > 0 ? trimmed : null);
+      } else {
+        vals.push(v);
+      }
     }
   }
   if (!sets.length) throw ApiError.badRequest("Nothing to update");
