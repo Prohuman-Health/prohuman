@@ -19,7 +19,7 @@ export type AttendanceStatus =
 export type PaymentStatus = "pending" | "paid" | "waived";
 export type TreatmentPlanStatus = "active" | "completed" | "closed";
 export type WaitlistStatus = "waiting" | "notified" | "booked" | "expired";
-export type AnswerType = "free_text" | "yes_no" | "scale" | "multiple_choice" | "file_upload";
+export type AnswerType = "free_text" | "yes_no" | "scale" | "multiple_choice" | "file_upload" | "drawing_pad";
 export type ReferralSourceType = "self" | "gp" | "specialist" | "hospital" | "internal";
 export type RecurrencePattern = "daily" | "weekly" | "biweekly" | "custom";
 

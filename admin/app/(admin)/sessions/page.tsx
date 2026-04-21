@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
     Search, RefreshCw, CalendarDays, X, Loader2, FileText,
     CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
@@ -32,6 +32,118 @@ const FILTERS = ["all", "pending", "confirmed", "completed", "no-show", "cancell
 
 function Skeleton({ className }: { className?: string }) {
     return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
+}
+
+function DrawingPadInput({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (next: string) => void;
+}) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const drawingRef = useRef(false);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (!value || !value.startsWith("data:image")) return;
+
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+            const drawW = img.width * scale;
+            const drawH = img.height * scale;
+            const x = (canvas.width - drawW) / 2;
+            const y = (canvas.height - drawH) / 2;
+            ctx.drawImage(img, x, y, drawW, drawH);
+        };
+        img.src = value;
+    }, [value]);
+
+    function pointFromEvent(e: React.PointerEvent<HTMLCanvasElement>) {
+        const canvas = canvasRef.current!;
+        const rect = canvas.getBoundingClientRect();
+        const sx = canvas.width / rect.width;
+        const sy = canvas.height / rect.height;
+        return {
+            x: (e.clientX - rect.left) * sx,
+            y: (e.clientY - rect.top) * sy,
+        };
+    }
+
+    function startDraw(e: React.PointerEvent<HTMLCanvasElement>) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const p = pointFromEvent(e);
+        drawingRef.current = true;
+        canvas.setPointerCapture(e.pointerId);
+        ctx.strokeStyle = "#111827";
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+    }
+
+    function draw(e: React.PointerEvent<HTMLCanvasElement>) {
+        if (!drawingRef.current) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const p = pointFromEvent(e);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+    }
+
+    function endDraw() {
+        if (!drawingRef.current) return;
+        drawingRef.current = false;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        onChange(canvas.toDataURL("image/png"));
+    }
+
+    function clear() {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        onChange("");
+    }
+
+    return (
+        <div className="space-y-2">
+            <canvas
+                ref={canvasRef}
+                width={900}
+                height={320}
+                onPointerDown={startDraw}
+                onPointerMove={draw}
+                onPointerUp={endDraw}
+                onPointerCancel={endDraw}
+                className="w-full h-44 rounded-xl border border-input bg-white touch-none"
+                style={{ touchAction: "none" }}
+            />
+            <div className="flex items-center justify-between">
+                <p className="text-[11px] text-muted-foreground">Use finger or stylus to draw. Drawing is saved as an image.</p>
+                <Button type="button" variant="outline" className="h-7 rounded-lg px-2.5 text-[11px]" onClick={clear}>Clear</Button>
+            </div>
+        </div>
+    );
 }
 
 // ── Session Form Modal ─────────────────────────────────────────────────────────
@@ -165,6 +277,14 @@ function SessionFormModal({ sessionId, sessionTitle, onClose }: {
                                                 onChange={e => setAnswer(q.id, { answer_text: e.target.value })}
                                                 className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
                                                 placeholder="Type your answer…" />
+                                        )}
+
+                                        {/* drawing_pad */}
+                                        {q.answer_type === "drawing_pad" && (
+                                            <DrawingPadInput
+                                                value={ans.answer_text ?? ""}
+                                                onChange={v => setAnswer(q.id, { answer_text: v })}
+                                            />
                                         )}
 
                                         {/* yes_no */}

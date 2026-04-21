@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
 import {
     Plus, Search, Pencil, Eye, Copy, Trash2, GripVertical, X,
     FileText, Loader2, RefreshCw, AlertCircle, CheckCircle2,
-    Type, ToggleLeft, List, Scale, BookOpen, Paperclip,
+    Type, ToggleLeft, List, Scale, BookOpen, Paperclip, PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,13 +16,14 @@ import {
 } from "@/lib/api";
 
 // ── Maps answer_type → backend enum ────────────────────────────────────────────
-// Backend enum: "free_text" | "yes_no" | "scale" | "multiple_choice"
+// Backend enum: "free_text" | "yes_no" | "scale" | "multiple_choice" | "file_upload" | "drawing_pad"
 const ANSWER_TYPE_META: Record<QuestionAnswerType, { icon: React.ElementType; label: string; hint?: string }> = {
     free_text: { icon: Type, label: "Free Text", hint: "Open-ended text answer" },
     yes_no: { icon: ToggleLeft, label: "Yes / No", hint: "Boolean yes or no" },
     scale: { icon: Scale, label: "Scale", hint: "Numeric rating (requires min/max)" },
     multiple_choice: { icon: List, label: "Multiple Choice", hint: "Select from options (min 2 options)" },
     file_upload: { icon: Paperclip, label: "File Upload", hint: "Photos, videos, or documents" },
+    drawing_pad: { icon: PenLine, label: "Drawing", hint: "Patient draws using finger or stylus" },
 };
 
 const ANSWER_TYPES = Object.keys(ANSWER_TYPE_META) as QuestionAnswerType[];
@@ -155,6 +156,11 @@ function PreviewModal({ formId, title, onClose }: { formId: string; title: strin
                                 {q.answer_type === "file_upload" && (
                                     <div className="h-10 rounded-xl border border-dashed border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center">
                                         Upload photos, videos, or documents
+                                    </div>
+                                )}
+                                {q.answer_type === "drawing_pad" && (
+                                    <div className="h-24 rounded-xl border border-dashed border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center justify-center">
+                                        Draw with finger or stylus
                                     </div>
                                 )}
                             </div>
@@ -459,6 +465,9 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
                                                 )}
                                                 {q.answer_type === "file_upload" && (
                                                     <p className="text-[10px] text-muted-foreground">Patients can upload photos, videos, and documents</p>
+                                                )}
+                                                {q.answer_type === "drawing_pad" && (
+                                                    <p className="text-[10px] text-muted-foreground">Patients can sketch directly using tablet touch or stylus</p>
                                                 )}
                                             </div>
 
