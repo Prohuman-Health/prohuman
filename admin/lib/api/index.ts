@@ -12,6 +12,7 @@ export * from "./patients";
 export * from "./sessions";
 export * from "./staff";
 export * from "./catalog";
+export * from "./calendar";
 export * from "./clinic";
 export * from "./whatsapp";
 export * from "./branches";

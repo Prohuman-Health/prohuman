@@ -10,7 +10,7 @@ import { useStaff } from "@/lib/contexts/staff-context";
 import { useSessionTypes } from "@/lib/contexts/catalog-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useAuth } from "@/lib/auth-context";
-import { sessionsApi, branchesApi, Branch } from "@/lib/api";
+import { sessionsApi, branchesApi, calendarApi, Branch } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -29,6 +29,8 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [success, setSuccess] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
+    const [isClosedDay, setIsClosedDay] = useState(false);
+    const [closedReason, setClosedReason] = useState<string | null>(null);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -75,6 +77,20 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         }
     }, [open, user?.branch_id, prefill?.date, prefill?.patientId, prefill?.doctorId, refreshSessionTypes]);
 
+    useEffect(() => {
+        if (!open || !form.date) return;
+        calendarApi.listClosures({ from: form.date, to: form.date })
+            .then(rows => {
+                const c = rows[0];
+                setIsClosedDay(!!c);
+                setClosedReason(c?.reason ?? null);
+            })
+            .catch(() => {
+                setIsClosedDay(false);
+                setClosedReason(null);
+            });
+    }, [open, form.date]);
+
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
             setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -89,6 +105,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!form.date) errs.date = "Date is required";
         if (!form.time) errs.time = "Time is required";
         if (!form.branch_id) errs.branch_id = "Select a branch";
+        if (isClosedDay) errs.date = "Clinic is closed on selected date";
         setErrors(errs);
         return Object.keys(errs).length === 0;
     }
@@ -227,6 +244,9 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                     <Input type="date" className={cn("pl-9 rounded-xl", errors.date && "border-red-400")}
                                         value={form.date} onChange={set("date")} />
                                 </div>
+                                {isClosedDay && (
+                                    <p className="text-[11px] text-red-600 mt-1">Clinic closed: {closedReason || "No reason provided"}</p>
+                                )}
                             </Field>
                             <Field label="Time" required error={errors.time}>
                                 <div className="relative">

@@ -32,6 +32,17 @@ export const getAvailableSlots = asyncHandler(async (req: Request, res: Response
   const { branch_id, date, session_type_id, duration_minutes = "60" } = req.query as Record<string, string>;
   const dayOfWeek = new Date(date).getDay();
 
+  const closed = await query(
+    `SELECT id FROM clinic_closures
+     WHERE closure_date = $1::date AND is_active = TRUE
+     LIMIT 1`,
+    [date]
+  );
+  if (closed.rows[0]) {
+    ApiResponse.ok(res, []);
+    return;
+  }
+
   // Get doctors available on this day at this branch
   const doctors = await query<{ doctor_id: string; start_time: string; end_time: string; doctor_name: string; specialty: string }>(
     `SELECT da.doctor_id, da.start_time, da.end_time,
@@ -87,6 +98,89 @@ export const getAvailableSlots = asyncHandler(async (req: Request, res: Response
   }
 
   ApiResponse.ok(res, result);
+});
+
+export const listClinicClosures = asyncHandler(async (req: Request, res: Response) => {
+  const { from, to } = req.query as Record<string, string>;
+  const conditions = ["is_active = TRUE"];
+  const vals: unknown[] = [];
+  let i = 1;
+
+  if (from) {
+    conditions.push(`closure_date >= $${i++}::date`);
+    vals.push(from);
+  }
+  if (to) {
+    conditions.push(`closure_date <= $${i++}::date`);
+    vals.push(to);
+  }
+
+  const result = await query(
+    `SELECT id, closure_date, reason, created_at, updated_at
+     FROM clinic_closures
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY closure_date`,
+    vals
+  );
+  ApiResponse.ok(res, result.rows);
+});
+
+export const createClinicClosure = asyncHandler(async (req: Request, res: Response) => {
+  const { closure_date, reason } = req.body as { closure_date: string; reason?: string };
+  const result = await query(
+    `INSERT INTO clinic_closures (closure_date, reason, created_by)
+     VALUES ($1::date, $2, $3)
+     ON CONFLICT (closure_date)
+     DO UPDATE SET
+       reason = EXCLUDED.reason,
+       is_active = TRUE,
+       updated_at = NOW()
+     RETURNING id, closure_date, reason, created_at, updated_at`,
+    [closure_date, reason?.trim() || null, req.user?.sub ?? null]
+  );
+  ApiResponse.created(res, result.rows[0]);
+});
+
+export const updateClinicClosure = asyncHandler(async (req: Request, res: Response) => {
+  const fields = req.body as { closure_date?: string; reason?: string; is_active?: boolean };
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+
+  if (fields.closure_date !== undefined) {
+    sets.push(`closure_date = $${i++}::date`);
+    vals.push(fields.closure_date);
+  }
+  if (fields.reason !== undefined) {
+    sets.push(`reason = $${i++}`);
+    vals.push(fields.reason.trim() || null);
+  }
+  if (fields.is_active !== undefined) {
+    sets.push(`is_active = $${i++}`);
+    vals.push(fields.is_active);
+  }
+
+  if (!sets.length) return ApiResponse.ok(res, null, "Nothing to update");
+
+  vals.push(req.params.id);
+  const result = await query(
+    `UPDATE clinic_closures
+     SET ${sets.join(", ")}, updated_at = NOW()
+     WHERE id = $${i}
+     RETURNING id, closure_date, reason, created_at, updated_at, is_active`,
+    vals
+  );
+  ApiResponse.ok(res, result.rows[0]);
+});
+
+export const deleteClinicClosure = asyncHandler(async (req: Request, res: Response) => {
+  await query(
+    `UPDATE clinic_closures
+     SET is_active = FALSE, updated_at = NOW()
+     WHERE id = $1`,
+    [req.params.id]
+  );
+  ApiResponse.noContent(res);
 });
 
 export const getMySchedule = asyncHandler(async (req: Request, res: Response) => {

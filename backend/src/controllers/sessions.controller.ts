@@ -94,13 +94,25 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
           recurrence?.pattern === "biweekly" ? 14 : 7
     );
 
-    // ── Clash detection ────────────────────────────────────────────────────────
+    // ── Closed date + clash detection ──────────────────────────────────────────
     // Collect all clashing slots upfront so we can report them all at once
     const clashes: string[] = [];
+    const closedDates: string[] = [];
 
     for (let n = 0; n < totalToCreate; n++) {
       const slotDate = new Date(scheduledDate);
       if (n > 0) slotDate.setDate(slotDate.getDate() + intervalDays * n);
+
+      const closed = await client.query(
+        `SELECT closure_date FROM clinic_closures
+         WHERE closure_date = $1::date AND is_active = TRUE
+         LIMIT 1`,
+        [slotDate.toISOString().slice(0, 10)]
+      );
+      if (closed.rows[0]) {
+        closedDates.push(slotDate.toISOString().slice(0, 10));
+        continue;
+      }
 
       // Two sessions overlap when:
       //   new_start  < existing_end  AND  new_end  > existing_start
@@ -123,6 +135,12 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
           `at ${conflicting.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`
         );
       }
+    }
+
+    if (closedDates.length > 0) {
+      throw ApiError.conflict(
+        `Clinic is closed on: ${[...new Set(closedDates)].join(", ")}. Please choose a different date.`
+      );
     }
 
     if (clashes.length > 0) {
@@ -215,6 +233,17 @@ export const rescheduleSession = asyncHandler(async (req: Request, res: Response
   const { scheduled_at, doctor_id, reason } = req.body;
   const existing = await query("SELECT * FROM sessions WHERE id = $1", [req.params.id]);
   if (!existing.rows[0]) throw ApiError.notFound("Session not found");
+
+  const rescheduleDate = new Date(scheduled_at).toISOString().slice(0, 10);
+  const closed = await query(
+    `SELECT id FROM clinic_closures
+     WHERE closure_date = $1::date AND is_active = TRUE
+     LIMIT 1`,
+    [rescheduleDate]
+  );
+  if (closed.rows[0]) {
+    throw ApiError.conflict("Clinic is closed on the selected date. Please choose a different day.");
+  }
 
   await withTransaction(async (client) => {
     await client.query(
