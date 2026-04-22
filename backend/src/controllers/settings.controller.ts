@@ -37,7 +37,12 @@ export const upsertSetting = asyncHandler(async (req: Request, res: Response) =>
 
 /** Bulk upsert — replaces all or many settings in one call */
 export const bulkUpsertSettings = asyncHandler(async (req: Request, res: Response) => {
-  const settings: Array<{ key: string; value: unknown; description?: string; branch_id?: string | null }> = req.body;
+  const incoming = req.body as
+    | { key: string; value: unknown; description?: string; branch_id?: string | null }
+    | Array<{ key: string; value: unknown; description?: string; branch_id?: string | null }>;
+
+  const settings = Array.isArray(incoming) ? incoming : [incoming];
+
   const updated = await withTransaction(async (client) => {
     const rows = [];
     for (const s of settings) {
