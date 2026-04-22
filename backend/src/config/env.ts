@@ -7,6 +7,27 @@ function requireEnv(key: string, fallback?: string): string {
   return val;
 }
 
+function parseBool(value: string | undefined, fallback = false): boolean {
+  if (value === undefined) return fallback;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parsePhoneAllowlist(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((raw) => raw.replace(/[\s\-()]/g, ""))
+    .map((normalized) => (normalized.startsWith("+") ? normalized : `+${normalized}`));
+}
+
 export const env = {
   NODE_ENV: requireEnv("NODE_ENV", "development"),
   PORT: parseInt(requireEnv("PORT", "5000"), 10),
@@ -18,4 +39,8 @@ export const env = {
   GOOGLE_CLIENT_SECRET: requireEnv("GOOGLE_CLIENT_SECRET"),
   GOOGLE_CALLBACK_URL: requireEnv("GOOGLE_CALLBACK_URL"),
   FRONTEND_URL: requireEnv("FRONTEND_URL", "http://localhost:3001"),
+  WHATSAPP_ENABLE_REMINDER_SEND: parseBool(process.env.WHATSAPP_ENABLE_REMINDER_SEND, false),
+  WHATSAPP_ALLOWED_REMINDER_NUMBERS: parsePhoneAllowlist(process.env.WHATSAPP_ALLOWED_REMINDER_NUMBERS),
+  WHATSAPP_MAX_REMINDER_RECIPIENTS: parsePositiveInt(process.env.WHATSAPP_MAX_REMINDER_RECIPIENTS, 5),
+  WHATSAPP_REMINDER_COOLDOWN_MINUTES: parsePositiveInt(process.env.WHATSAPP_REMINDER_COOLDOWN_MINUTES, 720),
 } as const;

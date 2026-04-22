@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle } from "lucide-react";
+import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle, QrCode, Smartphone, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel } from "@/lib/api";
+import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel, whatsappApi, WhatsAppAuthStatus } from "@/lib/api";
 
 type Tab = "clinic" | "notifications" | "security" | "locale" | "data" | "labels";
 
@@ -31,6 +31,11 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [waAuthStatus, setWaAuthStatus] = useState<WhatsAppAuthStatus | null>(null);
+    const [waAuthLoading, setWaAuthLoading] = useState(false);
+    const [waQrLoading, setWaQrLoading] = useState(false);
+    const [waLogoutLoading, setWaLogoutLoading] = useState(false);
+    const [waAuthError, setWaAuthError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -44,6 +49,61 @@ export default function SettingsPage() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
+
+    const loadWaStatus = useCallback(async () => {
+        setWaAuthLoading(true);
+        try {
+            const status = await whatsappApi.getAuthStatus();
+            setWaAuthStatus(status);
+            setWaAuthError(null);
+        } catch (e) {
+            setWaAuthError(e instanceof Error ? e.message : "Failed to fetch WhatsApp status");
+        } finally {
+            setWaAuthLoading(false);
+        }
+    }, []);
+
+    async function generateWaQr() {
+        setWaQrLoading(true);
+        try {
+            const status = await whatsappApi.generateQr();
+            setWaAuthStatus(status);
+            setWaAuthError(null);
+        } catch (e) {
+            setWaAuthError(e instanceof Error ? e.message : "Failed to generate QR code");
+        } finally {
+            setWaQrLoading(false);
+        }
+    }
+
+    async function logoutWa() {
+        setWaLogoutLoading(true);
+        try {
+            await whatsappApi.logoutAuth();
+            await loadWaStatus();
+            setWaAuthError(null);
+        } catch (e) {
+            setWaAuthError(e instanceof Error ? e.message : "Failed to logout WhatsApp session");
+        } finally {
+            setWaLogoutLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        if (activeTab !== "security") return;
+        loadWaStatus();
+    }, [activeTab, loadWaStatus]);
+
+    useEffect(() => {
+        if (activeTab !== "security") return;
+        if (!waAuthStatus?.connecting || waAuthStatus.connected) return;
+
+        const pollId = window.setInterval(() => {
+            loadWaStatus();
+        }, 8000);
+
+        return () => window.clearInterval(pollId);
+    }, [activeTab, waAuthStatus?.connecting, waAuthStatus?.connected, loadWaStatus]);
 
     const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
         setSettings(prev => ({ ...prev, [k]: e.target.value }));
@@ -175,6 +235,75 @@ export default function SettingsPage() {
                                             <option value="90">90 minutes</option>
                                         </select>
                                     </Row>
+
+                                    <div className="rounded-2xl border border-border/60 p-4 md:p-5 bg-muted/20">
+                                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-sm font-semibold flex items-center gap-2">
+                                                    <Smartphone className="w-4 h-4 text-emerald-600" /> WhatsApp Device Login (QR)
+                                                </h3>
+                                                <p className="text-xs text-muted-foreground mt-1">Scan QR from WhatsApp on your clinic phone to connect this server.</p>
+                                            </div>
+
+                                            <div className={cn(
+                                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium w-fit",
+                                                waAuthStatus?.connected ? "bg-emerald-100 text-emerald-700" : waAuthStatus?.connecting ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-700"
+                                            )}>
+                                                <span className={cn("w-1.5 h-1.5 rounded-full", waAuthStatus?.connected ? "bg-emerald-500" : waAuthStatus?.connecting ? "bg-amber-500" : "bg-slate-400")} />
+                                                {waAuthStatus?.connected ? "Connected" : waAuthStatus?.connecting ? "Awaiting Scan" : "Disconnected"}
+                                            </div>
+                                        </div>
+
+                                        {waAuthError && (
+                                            <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-xs text-red-700">
+                                                <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {waAuthError}
+                                            </div>
+                                        )}
+
+                                        {waAuthStatus?.connected_whatsapp_number && (
+                                            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
+                                                Connected Number: {waAuthStatus.connected_whatsapp_number}
+                                            </div>
+                                        )}
+
+                                        {waAuthStatus?.reconnecting && (
+                                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                                                Reconnecting... attempt {waAuthStatus.reconnect_attempt}
+                                            </div>
+                                        )}
+
+                                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                                            <Button type="button" className="rounded-xl gap-2" onClick={generateWaQr} disabled={waQrLoading || waAuthLoading}>
+                                                {waQrLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+                                                Generate QR
+                                            </Button>
+                                            <Button type="button" variant="outline" className="rounded-xl gap-2" onClick={loadWaStatus} disabled={waAuthLoading}>
+                                                {waAuthLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                                Refresh Status
+                                            </Button>
+                                            <Button type="button" variant="outline" className="rounded-xl gap-2" onClick={logoutWa} disabled={waLogoutLoading || waAuthLoading}>
+                                                {waLogoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+                                                Logout Device
+                                            </Button>
+                                        </div>
+
+                                        {waAuthStatus?.qr_data_url ? (
+                                            <div className="mt-4 flex flex-col sm:flex-row items-start gap-4 rounded-xl border border-border/70 p-3 bg-white">
+                                                <img src={waAuthStatus.qr_data_url} alt="WhatsApp QR code" className="w-44 h-44 rounded-lg border border-border/60" />
+                                                <div className="space-y-1.5 text-xs text-muted-foreground">
+                                                    <p className="text-foreground font-medium">Open WhatsApp on your phone, then scan this QR.</p>
+                                                    <p>Path: Linked devices → Link a device</p>
+                                                    <p>
+                                                        Expires: {waAuthStatus.qr_expires_at
+                                                            ? new Date(waAuthStatus.qr_expires_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                                                            : "soon"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="mt-4 text-xs text-muted-foreground">No active QR. Click Generate QR to start login.</p>
+                                        )}
+                                    </div>
                                 </Section>
                             )}
 
