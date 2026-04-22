@@ -5,7 +5,7 @@ import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, Map
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel, whatsappApi, WhatsAppAuthStatus } from "@/lib/api";
+import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel, whatsappApi, WhatsAppAuthStatus, ApiError } from "@/lib/api";
 
 type Tab = "clinic" | "notifications" | "security" | "locale" | "data" | "labels";
 
@@ -36,6 +36,7 @@ export default function SettingsPage() {
     const [waQrLoading, setWaQrLoading] = useState(false);
     const [waLogoutLoading, setWaLogoutLoading] = useState(false);
     const [waAuthError, setWaAuthError] = useState<string | null>(null);
+    const [waAuthSupported, setWaAuthSupported] = useState(true);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -51,25 +52,39 @@ export default function SettingsPage() {
     useEffect(() => { load(); }, [load]);
 
     const loadWaStatus = useCallback(async () => {
+        if (!waAuthSupported) return;
         setWaAuthLoading(true);
         try {
             const status = await whatsappApi.getAuthStatus();
             setWaAuthStatus(status);
             setWaAuthError(null);
         } catch (e) {
+            if (e instanceof ApiError && e.status === 404) {
+                setWaAuthSupported(false);
+                setWaAuthStatus(null);
+                setWaAuthError("WhatsApp QR auth endpoints are not available on this backend deployment.");
+                return;
+            }
             setWaAuthError(e instanceof Error ? e.message : "Failed to fetch WhatsApp status");
         } finally {
             setWaAuthLoading(false);
         }
-    }, []);
+    }, [waAuthSupported]);
 
     async function generateWaQr() {
+        if (!waAuthSupported) return;
         setWaQrLoading(true);
         try {
             const status = await whatsappApi.generateQr();
             setWaAuthStatus(status);
             setWaAuthError(null);
         } catch (e) {
+            if (e instanceof ApiError && e.status === 404) {
+                setWaAuthSupported(false);
+                setWaAuthStatus(null);
+                setWaAuthError("WhatsApp QR auth endpoints are not available on this backend deployment.");
+                return;
+            }
             setWaAuthError(e instanceof Error ? e.message : "Failed to generate QR code");
         } finally {
             setWaQrLoading(false);
@@ -77,12 +92,19 @@ export default function SettingsPage() {
     }
 
     async function logoutWa() {
+        if (!waAuthSupported) return;
         setWaLogoutLoading(true);
         try {
             await whatsappApi.logoutAuth();
             await loadWaStatus();
             setWaAuthError(null);
         } catch (e) {
+            if (e instanceof ApiError && e.status === 404) {
+                setWaAuthSupported(false);
+                setWaAuthStatus(null);
+                setWaAuthError("WhatsApp QR auth endpoints are not available on this backend deployment.");
+                return;
+            }
             setWaAuthError(e instanceof Error ? e.message : "Failed to logout WhatsApp session");
         } finally {
             setWaLogoutLoading(false);
@@ -91,11 +113,13 @@ export default function SettingsPage() {
 
     useEffect(() => {
         if (activeTab !== "security") return;
+        if (!waAuthSupported) return;
         loadWaStatus();
-    }, [activeTab, loadWaStatus]);
+    }, [activeTab, loadWaStatus, waAuthSupported]);
 
     useEffect(() => {
         if (activeTab !== "security") return;
+        if (!waAuthSupported) return;
         if (!waAuthStatus?.connecting || waAuthStatus.connected) return;
 
         const pollId = window.setInterval(() => {
@@ -103,7 +127,7 @@ export default function SettingsPage() {
         }, 8000);
 
         return () => window.clearInterval(pollId);
-    }, [activeTab, waAuthStatus?.connecting, waAuthStatus?.connected, loadWaStatus]);
+    }, [activeTab, waAuthStatus?.connecting, waAuthStatus?.connected, loadWaStatus, waAuthSupported]);
 
     const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
         setSettings(prev => ({ ...prev, [k]: e.target.value }));
@@ -111,7 +135,9 @@ export default function SettingsPage() {
     async function save() {
         setSaving(true);
         try {
-            await Promise.all(Object.entries(settings).map(([k, v]) => settingsApi.upsert(k, v)));
+            await settingsApi.bulkUpsert(
+                Object.entries(settings).map(([k, v]) => ({ key: k, value: v, branch_id: null }))
+            );
             setSaved(true);
             setTimeout(() => setSaved(false), 2500);
         } catch { /* silently ignore */ }
@@ -344,6 +370,10 @@ export default function SettingsPage() {
                                                 Logout Device
                                             </Button>
                                         </div>
+
+                                        {!waAuthSupported && (
+                                            <p className="text-xs text-muted-foreground">Deploy the latest backend build to enable /whatsapp/auth/status, /whatsapp/auth/qr, and /whatsapp/auth/logout.</p>
+                                        )}
 
                                         {waAuthStatus?.qr_data_url ? (
                                             <div className="mt-4 flex flex-col sm:flex-row items-start gap-4 rounded-xl border border-border/70 p-3 bg-white">

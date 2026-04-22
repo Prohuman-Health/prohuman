@@ -21,11 +21,20 @@ export const sessionTypesApi = {
 
 export interface Setting { key: string; value: unknown; branch_id: string | null; }
 
+export interface SettingUpsertPayload {
+    key: string;
+    value: unknown;
+    description?: string;
+    branch_id?: string | null;
+}
+
 export const settingsApi = {
     list: () => request<Setting[]>("/settings"),
     get: (key: string) => request<Setting>(`/settings/${key}`),
     upsert: (key: string, value: unknown, branch_id?: string) =>
-        request<Setting>("/settings", { method: "PUT", body: JSON.stringify({ key, value, branch_id }) }),
+        request<Setting>(`/settings/${key}`, { method: "PUT", body: JSON.stringify({ key, value, branch_id }) }),
+    bulkUpsert: (settings: SettingUpsertPayload[]) =>
+        request<Setting[]>("/settings", { method: "PUT", body: JSON.stringify(settings) }),
 };
 
 // ── Questions (reusable question bank) ────────────────────────────────────────
