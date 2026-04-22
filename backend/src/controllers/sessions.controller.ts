@@ -13,6 +13,19 @@ async function insertNotif(type: string, title: string, body: string | null, met
   } catch { /* notification failure must not break main operation */ }
 }
 
+async function isSettingEnabled(key: string, fallback = false): Promise<boolean> {
+  try {
+    const r = await query("SELECT value FROM settings WHERE key = $1 AND branch_id IS NULL LIMIT 1", [key]);
+    const v = r.rows[0]?.value;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "string") return ["1", "true", "yes", "on"].includes(v.trim().toLowerCase());
+    if (typeof v === "number") return v === 1;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export const listSessions = asyncHandler(async (req: Request, res: Response) => {
   const { patient_id, doctor_id, branch_id, status, from, to, page = "1", limit = "50" } = req.query as Record<string, string>;
   const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -166,6 +179,53 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
     }
     return sessions;
   });
+
+  const notifyScheduled = await isSettingEnabled("notify_session_scheduled", false);
+  if (notifyScheduled) {
+    try {
+      const summary = await query(
+        `SELECT s.id, s.branch_id, p.full_name AS patient_name, sf.full_name AS doctor_name,
+                st.name AS session_type_name, s.scheduled_at
+         FROM sessions s
+         JOIN patients p       ON p.id = s.patient_id
+         JOIN doctors d        ON d.id = s.doctor_id
+         JOIN staff sf         ON sf.id = d.staff_id
+         JOIN session_types st ON st.id = s.session_type_id
+         WHERE s.id = $1`,
+        [session[0].id]
+      );
+
+      const info = summary.rows[0];
+      if (info) {
+        const isSeries = session.length > 1;
+        const title = isSeries
+          ? `Session Series Scheduled — ${info.patient_name}`
+          : `Session Scheduled — ${info.patient_name}`;
+        const dateTime = new Date(info.scheduled_at).toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+
+        await insertNotif(
+          "session_scheduled",
+          title,
+          `${info.session_type_name} with Dr. ${info.doctor_name} on ${dateTime}`,
+          {
+            session_id: info.id,
+            patient_name: info.patient_name,
+            session_count: session.length,
+          },
+          info.branch_id
+        );
+      }
+    } catch {
+      // notification failures must not block session creation
+    }
+  }
 
   // Auto-generate invoice for first session (paid sessions later on attendance mark)
 
