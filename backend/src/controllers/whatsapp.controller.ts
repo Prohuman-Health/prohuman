@@ -18,6 +18,13 @@ type ReminderDispatchResult = {
     error?: string;
 };
 
+type ReminderSafetyConfig = {
+    enableSend: boolean;
+    allowedNumbers: string[];
+    maxRecipients: number;
+    cooldownMinutes: number;
+};
+
 // In-memory cooldown state to reduce accidental repeat sends.
 const reminderCooldown = new Map<string, number>();
 
@@ -34,8 +41,77 @@ function reminderKey(recipient: string, message: string): string {
     return `${recipient}:${digest}`;
 }
 
-async function dispatchReminderMessages(message: string, recipients: string[]): Promise<ReminderDispatchResult[]> {
-    if (!env.WHATSAPP_ENABLE_REMINDER_SEND) {
+function parseBoolValue(value: unknown, fallback: boolean): boolean {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+    if (typeof value === "number") return value === 1;
+    return fallback;
+}
+
+function parsePositiveIntValue(value: unknown, fallback: number): number {
+    if (typeof value === "number") return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+    if (typeof value === "string") {
+        const parsed = Number.parseInt(value.trim(), 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+    return fallback;
+}
+
+function parsePhoneAllowlistValue(value: unknown, fallback: string[]): string[] {
+    if (Array.isArray(value)) {
+        const normalized = value.map((v) => normalizePhone(String(v))).filter(Boolean);
+        return normalized.length ? [...new Set(normalized)] : fallback;
+    }
+
+    if (typeof value === "string") {
+        const normalized = value
+            .split(",")
+            .map((item) => normalizePhone(item))
+            .filter(Boolean);
+        return normalized.length ? [...new Set(normalized)] : [];
+    }
+
+    return fallback;
+}
+
+async function getReminderSafetyConfig(): Promise<ReminderSafetyConfig> {
+    const keys = [
+        "WHATSAPP_ENABLE_REMINDER_SEND",
+        "WHATSAPP_ALLOWED_REMINDER_NUMBERS",
+        "WHATSAPP_MAX_REMINDER_RECIPIENTS",
+        "WHATSAPP_REMINDER_COOLDOWN_MINUTES",
+    ];
+
+    const settingResult = await query(
+        `SELECT key, value FROM settings WHERE branch_id IS NULL AND key = ANY($1::text[])`,
+        [keys]
+    );
+
+    const map = new Map<string, unknown>();
+    for (const row of settingResult.rows) map.set(row.key as string, row.value);
+
+    return {
+        enableSend: parseBoolValue(
+            map.get("WHATSAPP_ENABLE_REMINDER_SEND"),
+            env.WHATSAPP_ENABLE_REMINDER_SEND
+        ),
+        allowedNumbers: parsePhoneAllowlistValue(
+            map.get("WHATSAPP_ALLOWED_REMINDER_NUMBERS"),
+            env.WHATSAPP_ALLOWED_REMINDER_NUMBERS
+        ),
+        maxRecipients: parsePositiveIntValue(
+            map.get("WHATSAPP_MAX_REMINDER_RECIPIENTS"),
+            env.WHATSAPP_MAX_REMINDER_RECIPIENTS
+        ),
+        cooldownMinutes: parsePositiveIntValue(
+            map.get("WHATSAPP_REMINDER_COOLDOWN_MINUTES"),
+            env.WHATSAPP_REMINDER_COOLDOWN_MINUTES
+        ),
+    };
+}
+
+async function dispatchReminderMessages(message: string, recipients: string[], enableSend: boolean): Promise<ReminderDispatchResult[]> {
+    if (!enableSend) {
         return recipients.map((recipient) => ({
             recipient,
             ok: true,
@@ -136,13 +212,14 @@ export const toggleTemplateActive = asyncHandler(async (req: Request, res: Respo
 // ── Send tightly-scoped project reminders ───────────────────────────────────
 export const sendProjectReminder = asyncHandler(async (req: Request, res: Response) => {
     const { message, recipients } = req.body as ReminderSendRequest;
+    const cfg = await getReminderSafetyConfig();
 
     if (!message?.trim()) throw ApiError.badRequest("message is required");
     if (!Array.isArray(recipients) || recipients.length === 0) {
         throw ApiError.badRequest("recipients array is required");
     }
 
-    const maxRecipients = env.WHATSAPP_MAX_REMINDER_RECIPIENTS;
+    const maxRecipients = cfg.maxRecipients;
     if (recipients.length > maxRecipients) {
         throw ApiError.badRequest(`Maximum ${maxRecipients} recipients allowed per reminder`);
     }
@@ -157,9 +234,9 @@ export const sendProjectReminder = asyncHandler(async (req: Request, res: Respon
 
     const uniqueRecipients = [...new Set(normalizedRecipients)];
 
-    const allowedSet = new Set(env.WHATSAPP_ALLOWED_REMINDER_NUMBERS);
+    const allowedSet = new Set(cfg.allowedNumbers);
     if (allowedSet.size === 0) {
-        throw ApiError.badRequest("No allowed reminder recipients configured in server env");
+        throw ApiError.badRequest("No allowed reminder recipients configured (settings or env)");
     }
 
     const blockedRecipients = uniqueRecipients.filter((r) => !allowedSet.has(r));
@@ -168,7 +245,7 @@ export const sendProjectReminder = asyncHandler(async (req: Request, res: Respon
     }
 
     const now = Date.now();
-    const cooldownMs = env.WHATSAPP_REMINDER_COOLDOWN_MINUTES * 60 * 1000;
+    const cooldownMs = cfg.cooldownMinutes * 60 * 1000;
     const cooledRecipients: string[] = [];
     const inCooldown: string[] = [];
 
@@ -183,7 +260,7 @@ export const sendProjectReminder = asyncHandler(async (req: Request, res: Respon
         throw ApiError.badRequest("All recipients are currently in cooldown for this reminder message");
     }
 
-    const dispatchResults = await dispatchReminderMessages(message.trim(), cooledRecipients);
+    const dispatchResults = await dispatchReminderMessages(message.trim(), cooledRecipients, cfg.enableSend);
     for (const result of dispatchResults) {
         if (result.ok) {
             reminderCooldown.set(reminderKey(result.recipient, message.trim()), now);
@@ -201,7 +278,7 @@ export const sendProjectReminder = asyncHandler(async (req: Request, res: Respon
             sent_count: sentCount,
             skipped_cooldown: inCooldown,
             failed,
-            mode: env.WHATSAPP_ENABLE_REMINDER_SEND ? "live" : "dry-run",
+            mode: cfg.enableSend ? "live" : "dry-run",
         },
         sentCount > 0 ? "Reminder dispatch processed" : "No reminders sent"
     );

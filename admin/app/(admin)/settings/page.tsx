@@ -201,6 +201,64 @@ export default function SettingsPage() {
                                             </button>
                                         </div>
                                     ))}
+
+                                    <div className="mt-2 rounded-2xl border border-border/60 p-4 md:p-5 bg-muted/20 space-y-4">
+                                        <div>
+                                            <h3 className="text-sm font-semibold">WhatsApp Reminder Safety Controls</h3>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                These values override .env defaults and are used by reminder dispatch guardrails.
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center justify-between py-2 border-b border-border/60">
+                                            <div>
+                                                <p className="text-sm font-medium">Enable Reminder Sending</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">Keep off until your WhatsApp provider integration is verified.</p>
+                                            </div>
+                                            <button
+                                                onClick={() => setSettings(prev => ({
+                                                    ...prev,
+                                                    WHATSAPP_ENABLE_REMINDER_SEND: prev.WHATSAPP_ENABLE_REMINDER_SEND === "true" ? "false" : "true"
+                                                }))}
+                                                className={cn("relative w-11 h-6 rounded-full transition-colors shrink-0",
+                                                    get("WHATSAPP_ENABLE_REMINDER_SEND", "false") === "true" ? "bg-foreground" : "bg-muted")}>
+                                                <span className={cn("absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all",
+                                                    get("WHATSAPP_ENABLE_REMINDER_SEND", "false") === "true" ? "left-5" : "left-0.5")} />
+                                            </button>
+                                        </div>
+
+                                        <Row label="Allowed Reminder Numbers (E.164, comma-separated)" icon={Phone}>
+                                            <textarea
+                                                rows={2}
+                                                value={get("WHATSAPP_ALLOWED_REMINDER_NUMBERS")}
+                                                onChange={set("WHATSAPP_ALLOWED_REMINDER_NUMBERS")}
+                                                placeholder="+919999999999,+918888888888"
+                                                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                                            />
+                                        </Row>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <Row label="Max Recipients Per Reminder" icon={Bell}>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    className="rounded-xl"
+                                                    value={get("WHATSAPP_MAX_REMINDER_RECIPIENTS", "5")}
+                                                    onChange={set("WHATSAPP_MAX_REMINDER_RECIPIENTS")}
+                                                />
+                                            </Row>
+
+                                            <Row label="Cooldown Minutes (same message + recipient)" icon={Clock}>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    className="rounded-xl"
+                                                    value={get("WHATSAPP_REMINDER_COOLDOWN_MINUTES", "720")}
+                                                    onChange={set("WHATSAPP_REMINDER_COOLDOWN_MINUTES")}
+                                                />
+                                            </Row>
+                                        </div>
+                                    </div>
                                 </Section>
                             )}
 
