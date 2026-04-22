@@ -256,7 +256,14 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
       );
 
       const info = waInfoRow.rows[0];
-      if (info?.patient_phone) {
+      if (!info) {
+        console.warn("[whatsapp] Session created but WhatsApp info row not found", { session_id: session[0].id });
+      } else if (!info.patient_phone) {
+        console.warn("[whatsapp] Skipped send: patient phone missing", {
+          session_id: info.id,
+          patient_name: info.patient_name,
+        });
+      } else {
         const tmplRow = await query(
           `SELECT body FROM whatsapp_templates
            WHERE trigger = 'appointment_confirmed' AND is_active = TRUE
@@ -264,7 +271,11 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
         );
 
         const template = tmplRow.rows[0]?.body as string | undefined;
-        if (template) {
+        if (!template) {
+          console.warn("[whatsapp] Skipped send: active appointment_confirmed template not found", {
+            session_id: info.id,
+          });
+        } else {
           const dateObj = new Date(info.scheduled_at);
           const message = applyTemplate(template, {
             patient_name: info.patient_name,
@@ -276,11 +287,25 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
           });
 
           await whatsappAuth.sendTextMessage(String(info.patient_phone), message);
+          console.info("[whatsapp] Appointment confirmation sent", {
+            session_id: info.id,
+            patient_phone: info.patient_phone,
+          });
         }
       }
-    } catch {
+    } catch (err) {
+      console.error("[whatsapp] Failed to send appointment confirmation", {
+        session_id: session[0].id,
+        error: err instanceof Error ? err.message : "unknown",
+      });
       // whatsapp failures must not block session creation
     }
+  } else {
+    console.info("[whatsapp] Skipped appointment confirmation by settings", {
+      session_id: session[0].id,
+      notify_session_scheduled: notifyScheduled,
+      whatsapp_enabled: whatsappEnabled,
+    });
   }
 
   // Auto-generate invoice for first session (paid sessions later on attendance mark)

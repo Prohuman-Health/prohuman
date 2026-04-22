@@ -76,6 +76,9 @@ class WhatsAppAuthManager {
 
   private toRecipientJid(phoneNumber: string): string {
     const normalized = phoneNumber.trim().replace(/[^\d]/g, "");
+    if (normalized.length < 8) {
+      throw new Error("Invalid recipient phone number");
+    }
     return `${normalized}@s.whatsapp.net`;
   }
 
