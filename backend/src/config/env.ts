@@ -28,6 +28,16 @@ function parsePhoneAllowlist(value: string | undefined): string[] {
     .map((normalized) => (normalized.startsWith("+") ? normalized : `+${normalized}`));
 }
 
+function parseTrustProxy(value: string | undefined, fallback: boolean | number): boolean | number {
+  if (value === undefined || value.trim() === "") return fallback;
+  const trimmed = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(trimmed)) return true;
+  if (["0", "false", "no", "off"].includes(trimmed)) return false;
+  const asNum = Number.parseInt(trimmed, 10);
+  if (Number.isFinite(asNum) && asNum >= 0) return asNum;
+  return fallback;
+}
+
 export const env = {
   NODE_ENV: requireEnv("NODE_ENV", "development"),
   PORT: parseInt(requireEnv("PORT", "5000"), 10),
@@ -39,6 +49,7 @@ export const env = {
   GOOGLE_CLIENT_SECRET: requireEnv("GOOGLE_CLIENT_SECRET"),
   GOOGLE_CALLBACK_URL: requireEnv("GOOGLE_CALLBACK_URL"),
   FRONTEND_URL: requireEnv("FRONTEND_URL", "http://localhost:3001"),
+  TRUST_PROXY: parseTrustProxy(process.env.TRUST_PROXY, process.env.NODE_ENV === "production"),
   WHATSAPP_ENABLE_REMINDER_SEND: parseBool(process.env.WHATSAPP_ENABLE_REMINDER_SEND, false),
   WHATSAPP_ALLOWED_REMINDER_NUMBERS: parsePhoneAllowlist(process.env.WHATSAPP_ALLOWED_REMINDER_NUMBERS),
   WHATSAPP_MAX_REMINDER_RECIPIENTS: parsePositiveInt(process.env.WHATSAPP_MAX_REMINDER_RECIPIENTS, 5),

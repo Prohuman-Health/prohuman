@@ -14,6 +14,9 @@ import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 
 const app = express();
 
+// Required when running behind Nginx/Cloudflare/ELB so rate limit and req.ip work correctly.
+app.set("trust proxy", env.TRUST_PROXY);
+
 // ── Security & Body Parsing ──────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({ origin: env.CORS_ORIGIN.split(","), credentials: true }));
