@@ -119,13 +119,20 @@ async function dispatchReminderMessages(message: string, recipients: string[], e
         }));
     }
 
-    // Placeholder for WhatsApp provider integration (Baileys/Twilio/etc).
-    // Keeping this explicit avoids accidental sends before provider setup.
-    return recipients.map((recipient) => ({
-        recipient,
-        ok: false,
-        error: "provider-not-configured",
-    }));
+    const results: ReminderDispatchResult[] = [];
+    for (const recipient of recipients) {
+        try {
+            await whatsappAuth.sendTextMessage(recipient, message);
+            results.push({ recipient, ok: true });
+        } catch (err) {
+            results.push({
+                recipient,
+                ok: false,
+                error: err instanceof Error ? err.message : "send-failed",
+            });
+        }
+    }
+    return results;
 }
 
 // ── List all WhatsApp templates ────────────────────────────────────────────

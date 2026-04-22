@@ -3,6 +3,7 @@ import { query, withTransaction } from "../config/db";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
+import { whatsappAuth } from "../utils/whatsappAuth";
 
 async function insertNotif(type: string, title: string, body: string | null, metadata: object, branchId: string | null) {
   try {
@@ -24,6 +25,14 @@ async function isSettingEnabled(key: string, fallback = false): Promise<boolean>
   } catch {
     return fallback;
   }
+}
+
+function applyTemplate(template: string, variables: Record<string, string>): string {
+  let out = template;
+  for (const [key, value] of Object.entries(variables)) {
+    out = out.replaceAll(`{{${key}}}`, value);
+  }
+  return out;
 }
 
 export const listSessions = asyncHandler(async (req: Request, res: Response) => {
@@ -224,6 +233,53 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
       }
     } catch {
       // notification failures must not block session creation
+    }
+  }
+
+  const whatsappEnabled = await isSettingEnabled("WHATSAPP_ENABLE_REMINDER_SEND", false);
+  if (notifyScheduled && whatsappEnabled) {
+    try {
+      const waInfoRow = await query(
+        `SELECT s.id, s.scheduled_at,
+                p.phone AS patient_phone, p.full_name AS patient_name,
+                sf.full_name AS doctor_name,
+                st.name AS session_type_name,
+                b.name AS branch_name
+         FROM sessions s
+         JOIN patients p       ON p.id = s.patient_id
+         JOIN doctors d        ON d.id = s.doctor_id
+         JOIN staff sf         ON sf.id = d.staff_id
+         JOIN session_types st ON st.id = s.session_type_id
+         JOIN branches b       ON b.id = s.branch_id
+         WHERE s.id = $1`,
+        [session[0].id]
+      );
+
+      const info = waInfoRow.rows[0];
+      if (info?.patient_phone) {
+        const tmplRow = await query(
+          `SELECT body FROM whatsapp_templates
+           WHERE trigger = 'appointment_confirmed' AND is_active = TRUE
+           LIMIT 1`
+        );
+
+        const template = tmplRow.rows[0]?.body as string | undefined;
+        if (template) {
+          const dateObj = new Date(info.scheduled_at);
+          const message = applyTemplate(template, {
+            patient_name: info.patient_name,
+            doctor_name: info.doctor_name,
+            session_type: info.session_type_name,
+            branch_name: info.branch_name,
+            date: dateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+            time: dateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+          });
+
+          await whatsappAuth.sendTextMessage(String(info.patient_phone), message);
+        }
+      }
+    } catch {
+      // whatsapp failures must not block session creation
     }
   }
 

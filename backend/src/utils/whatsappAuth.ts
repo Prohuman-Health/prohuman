@@ -74,6 +74,11 @@ class WhatsAppAuthManager {
     return `+${digits}`;
   }
 
+  private toRecipientJid(phoneNumber: string): string {
+    const normalized = phoneNumber.trim().replace(/[^\d]/g, "");
+    return `${normalized}@s.whatsapp.net`;
+  }
+
   private async ensureAuthDir() {
     await fs.mkdir(this.authDir, { recursive: true });
   }
@@ -211,6 +216,15 @@ class WhatsAppAuthManager {
     }
 
     return this.getStatus();
+  }
+
+  async sendTextMessage(phoneNumber: string, text: string): Promise<void> {
+    if (!this.socket || !this.connected) {
+      throw new Error("WhatsApp is not connected. Scan QR and connect first.");
+    }
+
+    const jid = this.toRecipientJid(phoneNumber);
+    await this.socket.sendMessage(jid, { text });
   }
 
   async logout(): Promise<void> {
