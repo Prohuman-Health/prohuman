@@ -257,28 +257,17 @@ export default function SessionTypesPage() {
                     </div>
                 ) : filtered.map((t, i) => {
                     const accentColor = t.color || ["#7C3AED","#10B981","#F59E0B","#3B82F6","#EC4899","#06B6D4","#F97316","#6366F1"][i % 8];
+                    const bgTint = accentColor + "18";
                     return (
-                    <div key={t.id} className="bg-white rounded-2xl overflow-hidden hover:shadow-md transition-shadow border border-border/40 flex flex-col">
-                        {/* Color accent bar */}
-                        <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: accentColor }} />
-
-                        <div className="p-4 md:p-5 flex flex-col gap-3 flex-1">
-                            {/* Header */}
+                    <div key={t.id} className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col">
+                        <div className="p-5 flex flex-col gap-4 flex-1">
+                            {/* Icon + actions row */}
                             <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold"
-                                        style={{ backgroundColor: accentColor }}>
-                                        {t.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="font-bold text-sm leading-tight truncate">{t.name}</p>
-                                        <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 py-0 font-medium mt-0.5",
-                                            t.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
-                                            {t.is_active ? "Active" : "Inactive"}
-                                        </Badge>
-                                    </div>
+                                <div className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center font-bold text-sm"
+                                    style={{ backgroundColor: bgTint, color: accentColor }}>
+                                    {t.name.charAt(0).toUpperCase()}
                                 </div>
-                                <div className="flex items-center gap-0.5 shrink-0">
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                     <button onClick={() => { setEditing(t); setModalOpen(true); }}
                                         className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
                                         <Pencil className="w-3.5 h-3.5" />
@@ -290,16 +279,24 @@ export default function SessionTypesPage() {
                                 </div>
                             </div>
 
+                            {/* Title + badge */}
+                            <div className="space-y-1.5">
+                                <h3 className="font-bold text-base leading-snug">{t.name}</h3>
+                                <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 py-0 font-medium",
+                                    t.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
+                                    {t.is_active ? "Active" : "Inactive"}
+                                </Badge>
+                            </div>
+
                             {/* Description */}
-                            {t.description ? (
-                                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{t.description}</p>
-                            ) : (
-                                <p className="text-xs text-muted-foreground/40 italic">No description</p>
-                            )}
+                            <p className={cn("text-sm leading-relaxed line-clamp-2",
+                                t.description ? "text-muted-foreground" : "text-muted-foreground/40 italic")}>
+                                {t.description || "No description"}
+                            </p>
 
                             {/* Stats row */}
                             <div className="grid grid-cols-2 gap-2 mt-auto">
-                                <div className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ backgroundColor: accentColor + "10" }}>
+                                <div className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ backgroundColor: bgTint }}>
                                     <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
                                         <Clock className="w-3 h-3" />Duration
                                     </span>
@@ -308,7 +305,7 @@ export default function SessionTypesPage() {
                                         <span className="text-xs font-semibold ml-0.5 text-muted-foreground">min</span>
                                     </span>
                                 </div>
-                                <div className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ backgroundColor: accentColor + "10" }}>
+                                <div className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5" style={{ backgroundColor: bgTint }}>
                                     <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
                                         <IndianRupee className="w-3 h-3" />Fee
                                     </span>
@@ -322,19 +319,26 @@ export default function SessionTypesPage() {
                                 </div>
                             </div>
 
-                            {/* Form pill */}
-                            <div className="pt-1 border-t border-border/50">
+                            {/* Footer: form info + CTA */}
+                            <div className="flex items-center justify-between pt-3 border-t border-border/50 gap-2">
                                 {t.form_id ? (
-                                    <div className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 w-fit max-w-full">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-blue-700 min-w-0">
                                         <FileText className="w-3 h-3 shrink-0" />
                                         <span className="truncate">{t.form_title ?? "Form linked"}</span>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 px-2.5 py-1.5">
+                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
                                         <FileText className="w-3 h-3 shrink-0" />
                                         No intake form
                                     </div>
                                 )}
+                                <button
+                                    onClick={() => { setEditing(t); setModalOpen(true); }}
+                                    className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-white transition-all duration-150"
+                                    onMouseEnter={e => { const el = e.currentTarget; el.style.backgroundColor = accentColor; el.style.borderColor = accentColor; }}
+                                    onMouseLeave={e => { const el = e.currentTarget; el.style.backgroundColor = ""; el.style.borderColor = ""; }}>
+                                    Edit type
+                                </button>
                             </div>
                         </div>
                     </div>
