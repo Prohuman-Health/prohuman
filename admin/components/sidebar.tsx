@@ -33,6 +33,7 @@ const directoryItems = [
 const generalItems = [
     { href: "/staff", label: "Staff & Roles", icon: ShieldCheck },
     { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/settings/closed-days", label: "Clinic Closed Days", icon: CalendarDays },
 ];
 
 interface SidebarProps {

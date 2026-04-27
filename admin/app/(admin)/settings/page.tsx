@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle, QrCode, Smartphone, LogOut } from "lucide-react";
+import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, CalendarDays, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle, QrCode, Smartphone, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -201,6 +202,15 @@ export default function SettingsPage() {
                                             onChange={v => setSettings(prev => ({ ...prev, working_hours: v }))}
                                         />
                                     </Row>
+                                    <div className="rounded-xl border border-border/70 bg-muted/20 p-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold">Clinic Closed Days</p>
+                                            <p className="text-xs text-muted-foreground mt-1">Set holidays and weekly closure days in one place.</p>
+                                        </div>
+                                        <Link href="/settings/closed-days" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-foreground text-white text-xs font-medium hover:opacity-90 transition-opacity">
+                                            <CalendarDays className="w-3.5 h-3.5" /> Manage Closed Days
+                                        </Link>
+                                    </div>
                                 </Section>
                             )}
 
