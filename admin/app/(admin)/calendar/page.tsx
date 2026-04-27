@@ -55,7 +55,7 @@ function dateKey(y: number, m: number, d: number) {
 
 // ── Day View ──────────────────────────────────────────────────────────────────
 function DayView({
-    date, sessions, doctorColorMap, sessionTypeColorMap, filterDoctor, onAddSession, closureReason, onSessionClick,
+    date, sessions, doctorColorMap, sessionTypeColorMap, filterDoctor, onAddSession, closureReason, onSessionClick, onEmptySlotClick,
 }: {
     date: Date;
     sessions: Session[];
@@ -65,6 +65,7 @@ function DayView({
     onAddSession: () => void;
     closureReason?: string | null;
     onSessionClick?: (session: Session) => void;
+    onEmptySlotClick?: (hour: number) => void;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const now = new Date();
@@ -138,7 +139,10 @@ function DayView({
                                 </span>
                             </div>
                             {/* Hour lane */}
-                            <div className="flex-1 border-t border-border/40 relative">
+                            <div
+                                className="flex-1 border-t border-border/40 relative cursor-pointer hover:bg-muted/20 transition-colors"
+                                onClick={() => onEmptySlotClick?.(h)}
+                            >
                                 {/* Half-hour marker */}
                                 <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20" />
                             </div>
@@ -179,7 +183,7 @@ function DayView({
 
                         return (
                             <div key={s.id}
-                                onClick={() => onSessionClick?.(s)}
+                                onClick={(e) => { e.stopPropagation(); onSessionClick?.(s); }}
                                 className={cn(
                                     "absolute left-16 rounded-xl border px-2.5 py-1.5 overflow-hidden cursor-pointer hover:shadow-md transition-shadow z-10",
                                     bgCls
@@ -547,7 +551,7 @@ export default function CalendarPage() {
                                     const color = doctorChipMap[s.doctor_id] ?? "bg-muted-foreground";
                                     const statusCls = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
                                     return (
-                                        <div key={s.id} onClick={() => openScheduleForDateTime(s.scheduled_at)} className="bg-muted/40 rounded-xl p-3 space-y-1.5 hover:bg-muted/60 transition-colors cursor-pointer">
+                                        <div key={s.id} onClick={() => openExistingSession(s)} className="bg-muted/40 rounded-xl p-3 space-y-1.5 hover:bg-muted/60 transition-colors cursor-pointer">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <div className={cn("w-2 h-2 rounded-full shrink-0 mt-0.5", color)} />
@@ -643,7 +647,8 @@ export default function CalendarPage() {
                                 setSelectedDateForModal(dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()));
                                 setScheduleOpen(true);
                             }}
-                            onSessionClick={openScheduleForDateTime}
+                            onSessionClick={openExistingSession}
+                            onEmptySlotClick={(hour) => openEmptyTimeSlot(hour, dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()))}
                         />
                     </div>
                 </div>
@@ -654,6 +659,57 @@ export default function CalendarPage() {
                 onClose={() => { setScheduleOpen(false); setSelectedDateForModal(undefined); setSelectedTimeForModal(undefined); }}
                 prefill={selectedDateForModal ? { date: selectedDateForModal, time: selectedTimeForModal } : undefined}
             />
+
+            {selectedSession && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedSession(null)} />
+                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
+                            <h3 className="font-bold text-sm">Session Info</h3>
+                            <button onClick={() => setSelectedSession(null)} className="w-7 h-7 rounded-lg bg-muted text-muted-foreground hover:text-foreground">
+                                <Plus className="w-3.5 h-3.5 rotate-45 mx-auto" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-3 text-sm">
+                            <div>
+                                <p className="text-[11px] uppercase text-muted-foreground font-semibold">Patient</p>
+                                <p className="font-medium">{selectedSession.patient_name}</p>
+                            </div>
+                            <div>
+                                <p className="text-[11px] uppercase text-muted-foreground font-semibold">Doctor</p>
+                                <p className="font-medium">Dr. {selectedSession.doctor_name}</p>
+                            </div>
+                            <div>
+                                <p className="text-[11px] uppercase text-muted-foreground font-semibold">Session Type</p>
+                                <p className="font-medium">{selectedSession.session_type_name}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Date</p>
+                                    <p className="font-medium">{new Date(selectedSession.scheduled_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Time</p>
+                                    <p className="font-medium">{new Date(selectedSession.scheduled_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Duration</p>
+                                    <p className="font-medium">{selectedSession.duration_minutes} min</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Status</p>
+                                    <p className="font-medium capitalize">{selectedSession.status}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="px-5 py-4 border-t border-border/60 flex justify-end">
+                            <Button variant="outline" className="rounded-xl" onClick={() => setSelectedSession(null)}>Close</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {closureOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

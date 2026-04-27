@@ -104,22 +104,19 @@ export const deleteAndRevokeStaff = asyncHandler(async (req: Request, res: Respo
   const staffResult = await query("SELECT id, role FROM staff WHERE id = $1", [id]);
   if (!staffResult.rows[0]) throw ApiError.notFound("Staff not found");
   
-  const { role } = staffResult.rows[0];
-
-  // For doctors, check if they have any sessions before allowing deletion
-  if (role === "doctor") {
-    const docResult = await query("SELECT id FROM doctors WHERE staff_id = $1", [id]);
-    if (docResult.rows[0]) {
-      const doctorId = docResult.rows[0].id;
-      const sessionsResult = await query("SELECT COUNT(*) FROM sessions WHERE doctor_id = $1", [doctorId]);
-      const sessionCount = parseInt(sessionsResult.rows[0].count, 10);
-      if (sessionCount > 0) {
-        throw ApiError.badRequest(
-          `Cannot delete this doctor. They have ${sessionCount} session(s). ` +
-          "Deactivate the account instead to revoke login access."
-        );
-      }
-    }
+  // Check doctor-linked sessions from doctors table directly (role may have changed over time).
+  const doctorSessionsResult = await query(
+    `SELECT COUNT(*)::int AS count
+     FROM sessions
+     WHERE doctor_id IN (SELECT id FROM doctors WHERE staff_id = $1)`,
+    [id]
+  );
+  const sessionsAsDoctor = doctorSessionsResult.rows[0]?.count ?? 0;
+  if (sessionsAsDoctor > 0) {
+    throw ApiError.badRequest(
+      `Cannot delete this staff member. They are linked to ${sessionsAsDoctor} session(s) as doctor. ` +
+      "Deactivate the account instead to revoke login access."
+    );
   }
 
   // Check for other blocking references
@@ -139,12 +136,10 @@ export const deleteAndRevokeStaff = asyncHandler(async (req: Request, res: Respo
     );
   }
 
-  // Use transaction to safely delete staff and associated records
+  // Use transaction to safely delete staff and associated records.
   await withTransaction(async (client) => {
-    // If they're a doctor, delete the doctor record first
-    if (role === "doctor") {
-      await client.query("DELETE FROM doctors WHERE staff_id = $1", [id]);
-    }
+    // Delete doctor record first (if present), then staff record.
+    await client.query("DELETE FROM doctors WHERE staff_id = $1", [id]);
     // Then delete the staff record
     await client.query("DELETE FROM staff WHERE id = $1", [id]);
   });
