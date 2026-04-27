@@ -230,8 +230,9 @@ export default function DoctorsPage() {
         return (
             <div className={cn("flex flex-col overflow-hidden", mobile ? "h-full" : "flex-1")}>
                 {/* Profile / Calendar / Availability tabs */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
-                    <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-border/60">
+                    <div className="min-w-0 flex-1 overflow-x-auto">
+                        <div className="inline-flex items-center gap-1 bg-muted rounded-xl p-1">
                         {([["profile", <User key="u" className="w-3 h-3" />, "Profile"],
                         ["calendar", <CalendarDays key="c" className="w-3 h-3" />, "Calendar"],
                         ["availability", <Clock key="cl" className="w-3 h-3" />, "Schedule"]] as const).map(([mode, Icon, label]) => (
@@ -241,8 +242,9 @@ export default function DoctorsPage() {
                                 {Icon} {label}
                             </button>
                         ))}
+                        </div>
                     </div>
-                    <button onClick={() => setSelected(null)} className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                    <button onClick={() => setSelected(null)} className="w-6 h-6 shrink-0 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                         <X className="w-3 h-3" />
                     </button>
                 </div>

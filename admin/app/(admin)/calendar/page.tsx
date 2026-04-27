@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
-    ChevronLeft, ChevronRight, Plus, Clock, RefreshCw, Filter,
-    CalendarDays, LayoutGrid, Ban, Trash2,
+    ChevronLeft, ChevronRight, Plus, Clock, RefreshCw, Filter, X,
+    CalendarDays, LayoutGrid, Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -245,6 +245,7 @@ export default function CalendarPage() {
     const [viewMonth, setViewMonth] = useState(today.getMonth());
     const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
     const [filterDoctor, setFilterDoctor] = useState<string>("all");
+    const [filterOpen, setFilterOpen] = useState(false);
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [selectedDateForModal, setSelectedDateForModal] = useState<string | undefined>();
     const [selectedTimeForModal, setSelectedTimeForModal] = useState<string | undefined>();
@@ -253,11 +254,6 @@ export default function CalendarPage() {
     const [closuresLoading, setClosuresLoading] = useState(false);
     const [settingsClosedDates, setSettingsClosedDates] = useState<string[]>([]);
     const [settingsWeeklyClosedDays, setSettingsWeeklyClosedDays] = useState<number[]>([]);
-    const [closureOpen, setClosureOpen] = useState(false);
-    const [closureDate, setClosureDate] = useState(today.toISOString().slice(0, 10));
-    const [closureReason, setClosureReason] = useState("");
-    const [closureSaving, setClosureSaving] = useState(false);
-    const [closureError, setClosureError] = useState<string | null>(null);
     // "month" | "day"
     const [viewMode, setViewMode] = useState<"month" | "day">("month");
 
@@ -278,6 +274,10 @@ export default function CalendarPage() {
         sessionTypes.forEach(st => { if (st.color) map[st.name] = st.color; });
         return map;
     }, [sessionTypes]);
+
+    const activeDoctor = useMemo(() => {
+        return doctors.find((doctor) => doctor.id === filterDoctor) ?? null;
+    }, [doctors, filterDoctor]);
 
     const sessionsByDate = useMemo(() => {
         const map: Record<string, Session[]> = {};
@@ -401,36 +401,6 @@ export default function CalendarPage() {
         setSelectedSession(session);
     }
 
-    async function createClosure() {
-        if (!closureDate) return;
-        setClosureSaving(true);
-        setClosureError(null);
-        try {
-            await calendarApi.createClosure({
-                closure_date: closureDate,
-                ...(closureReason.trim() ? { reason: closureReason.trim() } : {}),
-            });
-            const from = dateKey(viewYear, viewMonth, 1);
-            const to = dateKey(viewYear, viewMonth, daysInMonth);
-            setClosures(await calendarApi.listClosures({ from, to }));
-            setClosureOpen(false);
-            setClosureReason("");
-        } catch (e) {
-            setClosureError(e instanceof Error ? e.message : "Failed to save closure");
-        } finally {
-            setClosureSaving(false);
-        }
-    }
-
-    async function removeClosure(id: string) {
-        try {
-            await calendarApi.deleteClosure(id);
-            setClosures(prev => prev.filter(c => c.id !== id));
-        } catch {
-            // ignore
-        }
-    }
-
     return (
         <div className="flex flex-col gap-4 p-4 md:p-5 min-h-full">
             {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -460,34 +430,24 @@ export default function CalendarPage() {
                     <Button size="sm" className="gap-1.5 rounded-xl" onClick={() => setScheduleOpen(true)}>
                         <Plus className="w-4 h-4" /> New Session
                     </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5 rounded-xl" onClick={() => {
-                        const d = selectedDay ? dateKey(viewYear, viewMonth, selectedDay) : today.toISOString().slice(0, 10);
-                        setClosureDate(d);
-                        setClosureReason(selectedClosure?.reason ?? "");
-                        setClosureError(null);
-                        setClosureOpen(true);
-                    }}>
-                        <Ban className="w-4 h-4" /> Add Closure
-                    </Button>
                 </div>
             </div>
 
-            {/* ── Doctor filter strip ─────────────────────────────────────────── */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 shrink-0">
-                <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <button onClick={() => setFilterDoctor("all")}
-                    className={cn("px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all",
-                        filterDoctor === "all" ? "bg-foreground text-white" : "bg-white text-muted-foreground hover:text-foreground border border-border")}>
-                    All Doctors
+            {/* ── Doctor filter trigger ───────────────────────────────────────── */}
+            <div className="flex items-center justify-between gap-3 shrink-0">
+                <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filters</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                        {activeDoctor ? `Doctor: ${activeDoctor.full_name}` : "Showing sessions for all doctors"}
+                    </p>
+                </div>
+                <button
+                    onClick={() => setFilterOpen(true)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                    <Filter className="w-4 h-4" />
+                    Open Filters
                 </button>
-                {doctors.map((d, i) => (
-                    <button key={d.id} onClick={() => setFilterDoctor(filterDoctor === d.id ? "all" : d.id)}
-                        className={cn("px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5",
-                            filterDoctor === d.id ? "bg-foreground text-white" : "bg-white text-muted-foreground hover:text-foreground border border-border")}>
-                        <span className={cn("w-2 h-2 rounded-full", CHIP_COLORS[i % CHIP_COLORS.length])} />
-                        {d.full_name.replace("Dr. ", "")}
-                    </button>
-                ))}
             </div>
 
             {/* ── Month nav (shared) ──────────────────────────────────────────── */}
@@ -681,17 +641,10 @@ export default function CalendarPage() {
                                     <div className="min-w-0">
                                         <p className="text-xs font-semibold text-red-700">{new Date(c.closure_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
                                         <p className="text-[11px] text-red-600 truncate">{c.reason || "Clinic closed"}</p>
-                                        {c.source !== "calendar" && (
-                                            <p className="text-[10px] text-red-500/90 mt-0.5">From Settings</p>
-                                        )}
+                                        <p className="text-[10px] text-red-500/90 mt-0.5">
+                                            {c.source === "calendar" ? "Calendar closure" : "From Settings"}
+                                        </p>
                                     </div>
-                                    {c.source === "calendar" ? (
-                                        <button onClick={() => removeClosure(c.id)} className="p-1 rounded-lg text-red-500 hover:bg-red-100 transition-colors">
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    ) : (
-                                        <span className="text-[10px] text-muted-foreground">Locked</span>
-                                    )}
                                 </div>
                             ))}
                         </div>
@@ -744,6 +697,75 @@ export default function CalendarPage() {
                 prefill={selectedDateForModal ? { date: selectedDateForModal, time: selectedTimeForModal } : undefined}
             />
 
+            {filterOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFilterOpen(false)} />
+                    <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+                            <div>
+                                <h3 className="font-bold text-sm">Calendar Filters</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">Choose which doctor&apos;s sessions to show.</p>
+                            </div>
+                            <button
+                                onClick={() => setFilterOpen(false)}
+                                className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+                            <button
+                                onClick={() => setFilterDoctor("all")}
+                                className={cn(
+                                    "w-full flex items-center justify-between rounded-xl border px-3.5 py-3 text-sm transition-colors",
+                                    filterDoctor === "all"
+                                        ? "border-foreground bg-foreground text-white"
+                                        : "border-border bg-white text-foreground hover:bg-muted"
+                                )}
+                            >
+                                <span className="font-medium">All Doctors</span>
+                                <span className={cn("text-xs", filterDoctor === "all" ? "text-white/80" : "text-muted-foreground")}>No doctor filter</span>
+                            </button>
+
+                            <div className="space-y-2">
+                                {doctors.map((doctor, index) => {
+                                    const isActive = filterDoctor === doctor.id;
+                                    return (
+                                        <button
+                                            key={doctor.id}
+                                            onClick={() => setFilterDoctor(doctor.id)}
+                                            className={cn(
+                                                "w-full flex items-center justify-between rounded-xl border px-3.5 py-3 text-left transition-colors",
+                                                isActive
+                                                    ? "border-foreground bg-foreground text-white"
+                                                    : "border-border bg-white text-foreground hover:bg-muted"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", CHIP_COLORS[index % CHIP_COLORS.length])} />
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium truncate">{doctor.full_name}</p>
+                                                    <p className={cn("text-xs truncate", isActive ? "text-white/80" : "text-muted-foreground")}>
+                                                        {doctor.specialty || "Doctor"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {isActive && <span className="text-xs font-medium">Selected</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="px-5 py-4 border-t border-border/60 flex items-center justify-between gap-3">
+                            <Button variant="outline" className="rounded-xl" onClick={() => setFilterDoctor("all")}>Reset</Button>
+                            <Button className="rounded-xl" onClick={() => setFilterOpen(false)}>Apply Filters</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedSession && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedSession(null)} />
@@ -795,35 +817,6 @@ export default function CalendarPage() {
                 </div>
             )}
 
-            {closureOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setClosureOpen(false)} />
-                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="px-5 py-4 border-b border-border/60">
-                            <h3 className="font-bold text-sm">Add Clinic Closure</h3>
-                            <p className="text-xs text-muted-foreground mt-0.5">Closed days will be blocked from scheduling</p>
-                        </div>
-                        <div className="p-5 space-y-3">
-                            {closureError && <p className="text-xs text-red-600">{closureError}</p>}
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Date</label>
-                                <input type="date" value={closureDate} onChange={e => setClosureDate(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Reason</label>
-                                <textarea value={closureReason} onChange={e => setClosureReason(e.target.value)} rows={2} placeholder="Holiday / maintenance / staff leave"
-                                    className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none" />
-                            </div>
-                        </div>
-                        <div className="px-5 py-4 border-t border-border/60 flex justify-end gap-2">
-                            <Button variant="outline" className="rounded-xl" onClick={() => setClosureOpen(false)} disabled={closureSaving}>Cancel</Button>
-                            <Button className="rounded-xl gap-1.5" onClick={createClosure} disabled={closureSaving || !closureDate}>
-                                {closureSaving ? "Saving..." : "Save Closure"}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
