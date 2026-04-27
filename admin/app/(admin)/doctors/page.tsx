@@ -537,9 +537,6 @@ export default function DoctorsPage() {
 
             {/* Add doctor modal */}
             <NewStaffModal open={addDoctorOpen} onClose={() => { setAddDoctorOpen(false); refresh(); }} doctorMode />
-
-            {/* Edit doctor modal */}
-            <EditStaffModal staff={editingDoctor} onClose={() => { setEditingDoctor(null); refresh(); }} />
         </div>
     );
 }

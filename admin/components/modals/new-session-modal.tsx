@@ -61,6 +61,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
             patient_id: prefill?.patientId ?? prev.patient_id,
             doctor_id: prefill?.doctorId ?? prev.doctor_id,
             date: prefill?.date ?? todayStr,
+            time: prefill?.time ?? prev.time,
             branch_id: user?.branch_id ?? prev.branch_id,
         }));
 
@@ -106,6 +107,14 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!form.time) errs.time = "Time is required";
         if (!form.branch_id) errs.branch_id = "Select a branch";
         if (isClosedDay) errs.date = "Clinic is closed on selected date";
+        if (form.date && form.time) {
+            const selectedDateTime = new Date(`${form.date}T${form.time}:00`);
+            if (Number.isNaN(selectedDateTime.getTime())) {
+                errs.time = "Invalid date/time";
+            } else if (selectedDateTime <= new Date()) {
+                errs.time = "Session cannot be scheduled in the past";
+            }
+        }
         setErrors(errs);
         return Object.keys(errs).length === 0;
     }

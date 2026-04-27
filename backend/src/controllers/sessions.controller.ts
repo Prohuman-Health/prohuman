@@ -95,6 +95,14 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
     duration = st.rows[0]?.default_duration_minutes ?? 60;
   }
 
+  const firstScheduledAt = new Date(scheduled_at);
+  if (Number.isNaN(firstScheduledAt.getTime())) {
+    throw ApiError.badRequest("Invalid scheduled_at value");
+  }
+  if (firstScheduledAt.getTime() <= Date.now()) {
+    throw ApiError.badRequest("Session cannot be scheduled in the past");
+  }
+
   const session = await withTransaction(async (client) => {
     let series_id: string | null = null;
 
