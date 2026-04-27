@@ -12,7 +12,7 @@ import { useSessions } from "@/lib/contexts/sessions-context";
 import { useStaff } from "@/lib/contexts/staff-context";
 import { useCatalog } from "@/lib/contexts/catalog-context";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
-import { calendarApi, type Session, type ClinicClosure } from "@/lib/api";
+import { calendarApi, settingsApi, type Session, type ClinicClosure } from "@/lib/api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -52,6 +52,23 @@ function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); 
 function dateKey(y: number, m: number, d: number) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
+
+function coerceClosedDates(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value.filter((v): v is string => typeof v === "string"))].sort((a, b) => a.localeCompare(b));
+}
+
+function coerceWeeklyClosedDays(value: unknown): number[] {
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value.map(v => Number(v)).filter(v => Number.isInteger(v) && v >= 0 && v <= 6))].sort((a, b) => a - b);
+}
+
+type CalendarClosureView = {
+    id: string;
+    closure_date: string;
+    reason: string | null;
+    source: "calendar" | "settings_date" | "settings_weekly";
+};
 
 // ── Day View ──────────────────────────────────────────────────────────────────
 function DayView({
@@ -234,6 +251,8 @@ export default function CalendarPage() {
     const [selectedSession, setSelectedSession] = useState<Session | null>(null);
     const [closures, setClosures] = useState<ClinicClosure[]>([]);
     const [closuresLoading, setClosuresLoading] = useState(false);
+    const [settingsClosedDates, setSettingsClosedDates] = useState<string[]>([]);
+    const [settingsWeeklyClosedDays, setSettingsWeeklyClosedDays] = useState<number[]>([]);
     const [closureOpen, setClosureOpen] = useState(false);
     const [closureDate, setClosureDate] = useState(today.toISOString().slice(0, 10));
     const [closureReason, setClosureReason] = useState("");
@@ -285,11 +304,69 @@ export default function CalendarPage() {
             .finally(() => setClosuresLoading(false));
     }, [viewYear, viewMonth, daysInMonth]);
 
+    useEffect(() => {
+        settingsApi.list()
+            .then((list) => {
+                const map = new Map(list.map(s => [s.key, s.value]));
+                setSettingsClosedDates(coerceClosedDates(map.get("clinic_closed_days")));
+                setSettingsWeeklyClosedDays(coerceWeeklyClosedDays(map.get("clinic_weekly_closed_days")));
+            })
+            .catch(() => {
+                setSettingsClosedDates([]);
+                setSettingsWeeklyClosedDays([]);
+            });
+    }, []);
+
+    const settingsClosuresForMonth = useMemo<CalendarClosureView[]>(() => {
+        const out: CalendarClosureView[] = [];
+        const monthPrefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-`;
+
+        settingsClosedDates.forEach((d) => {
+            if (d.startsWith(monthPrefix)) {
+                out.push({
+                    id: `settings_date:${d}`,
+                    closure_date: d,
+                    reason: "Clinic closed",
+                    source: "settings_date",
+                });
+            }
+        });
+
+        if (settingsWeeklyClosedDays.length > 0) {
+            for (let day = 1; day <= daysInMonth; day += 1) {
+                const dt = new Date(viewYear, viewMonth, day);
+                if (settingsWeeklyClosedDays.includes(dt.getDay())) {
+                    const key = dateKey(viewYear, viewMonth, day);
+                    out.push({
+                        id: `settings_weekly:${key}`,
+                        closure_date: key,
+                        reason: "Weekly clinic closure",
+                        source: "settings_weekly",
+                    });
+                }
+            }
+        }
+
+        return out;
+    }, [viewYear, viewMonth, daysInMonth, settingsClosedDates, settingsWeeklyClosedDays]);
+
     const closuresByDate = useMemo(() => {
-        const map: Record<string, ClinicClosure> = {};
-        closures.forEach(c => { map[c.closure_date] = c; });
+        const map: Record<string, CalendarClosureView> = {};
+        settingsClosuresForMonth.forEach(c => { map[c.closure_date] = c; });
+        closures.forEach(c => {
+            map[c.closure_date] = {
+                id: c.id,
+                closure_date: c.closure_date,
+                reason: c.reason,
+                source: "calendar",
+            };
+        });
         return map;
-    }, [closures]);
+    }, [settingsClosuresForMonth, closures]);
+
+    const monthClosures = useMemo(() => {
+        return Object.values(closuresByDate).sort((a, b) => a.closure_date.localeCompare(b.closure_date));
+    }, [closuresByDate]);
 
     const selectedKey = selectedDay ? dateKey(viewYear, viewMonth, selectedDay) : null;
     const selectedClosure = selectedKey ? closuresByDate[selectedKey] : undefined;
@@ -597,17 +674,24 @@ export default function CalendarPage() {
                                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Closures</p>
                                 {closuresLoading && <span className="text-[10px] text-muted-foreground">Loading...</span>}
                             </div>
-                            {closures.length === 0 ? (
+                            {monthClosures.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">No closure days this month.</p>
-                            ) : closures.map(c => (
+                            ) : monthClosures.map(c => (
                                 <div key={c.id} className="flex items-start justify-between gap-2 rounded-xl border border-red-100 bg-red-50/60 px-2.5 py-2">
                                     <div className="min-w-0">
                                         <p className="text-xs font-semibold text-red-700">{new Date(c.closure_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
                                         <p className="text-[11px] text-red-600 truncate">{c.reason || "Clinic closed"}</p>
+                                        {c.source !== "calendar" && (
+                                            <p className="text-[10px] text-red-500/90 mt-0.5">From Settings</p>
+                                        )}
                                     </div>
-                                    <button onClick={() => removeClosure(c.id)} className="p-1 rounded-lg text-red-500 hover:bg-red-100 transition-colors">
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {c.source === "calendar" ? (
+                                        <button onClick={() => removeClosure(c.id)} className="p-1 rounded-lg text-red-500 hover:bg-red-100 transition-colors">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    ) : (
+                                        <span className="text-[10px] text-muted-foreground">Locked</span>
+                                    )}
                                 </div>
                             ))}
                         </div>
