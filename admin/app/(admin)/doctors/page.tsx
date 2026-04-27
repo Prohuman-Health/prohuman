@@ -12,6 +12,8 @@ import type { Doctor } from "@/lib/api";
 import { doctorsApi, type DoctorAvailabilitySlot } from "@/lib/api";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 import { NewStaffModal } from "@/components/modals/new-staff-modal";
+import { EditStaffModal } from "@/components/modals/edit-staff-modal";
+import { staffApi, type StaffMember } from "@/lib/api";
 
 const AVATAR_COLORS = [
     "bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700",
@@ -88,6 +90,8 @@ export default function DoctorsPage() {
     const [viewMode, setViewMode] = useState<ViewMode>("profile");
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [addDoctorOpen, setAddDoctorOpen] = useState(false);
+    const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+    const [editingDoctor, setEditingDoctor] = useState<StaffMember | null>(null);
 
     // Availability state
     const [slots, setSlots] = useState<DoctorAvailabilitySlot[]>([]);
@@ -115,6 +119,12 @@ export default function DoctorsPage() {
     useEffect(() => {
         if (selected && viewMode === "availability") loadSlots(selected.id);
     }, [selected, viewMode, loadSlots]);
+
+    useEffect(() => {
+        const handleClickOutside = () => setMenuOpenId(null);
+        document.addEventListener("click", handleClickOutside);
+        return () => document.removeEventListener("click", handleClickOutside);
+    }, []);
 
     async function saveSlot() {
         if (!selected || !slotFormKey) return;
@@ -506,9 +516,50 @@ export default function DoctorsPage() {
                                                 </Badge>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={e => e.stopPropagation()}>
-                                                    <MoreHorizontal className="w-4 h-4" />
-                                                </button>
+                                                <div className="relative">
+                                                    <button 
+                                                        className="text-muted-foreground hover:text-foreground transition-colors" 
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            setMenuOpenId(menuOpenId === d.id ? null : d.id);
+                                                        }}
+                                                    >
+                                                        <MoreHorizontal className="w-4 h-4" />
+                                                    </button>
+                                                    {menuOpenId === d.id && (
+                                                        <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-border z-50 min-w-[160px]">
+                                                            <button
+                                                                onClick={e => {
+                                                                    e.stopPropagation();
+                                                                    setEditingDoctor({
+                                                                        id: d.id,
+                                                                        staff_id: d.staff_id,
+                                                                        full_name: d.full_name,
+                                                                        email: d.email,
+                                                                        phone: d.phone,
+                                                                        role: "doctor",
+                                                                        is_active: d.is_active,
+                                                                        created_at: new Date().toISOString(),
+                                                                    } as StaffMember);
+                                                                    setMenuOpenId(null);
+                                                                }}
+                                                                className="block w-full text-left px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors first:rounded-t-lg"
+                                                            >
+                                                                Edit Doctor
+                                                            </button>
+                                                            <button
+                                                                onClick={e => {
+                                                                    e.stopPropagation();
+                                                                    setSelected(d);
+                                                                    setMenuOpenId(null);
+                                                                }}
+                                                                className="block w-full text-left px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                            >
+                                                                View Details
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -542,6 +593,9 @@ export default function DoctorsPage() {
 
             {/* Add doctor modal */}
             <NewStaffModal open={addDoctorOpen} onClose={() => { setAddDoctorOpen(false); refresh(); }} doctorMode />
+
+            {/* Edit doctor modal */}
+            <EditStaffModal staff={editingDoctor} onClose={() => { setEditingDoctor(null); refresh(); }} />
         </div>
     );
 }

@@ -410,7 +410,7 @@ export default function DashboardPage() {
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {upcoming.map(s => (
-                                        <tr key={s.id} className="hover:bg-muted/30 transition-colors group">
+                                        <tr key={s.id} className="hover:bg-muted/30 transition-colors group cursor-pointer" onClick={() => window.location.href = `/calendar?date=${s.scheduled_at.slice(0, 10)}`}>
                                             {/* Date & Time */}
                                             <td className="px-5 py-3 whitespace-nowrap">
                                                 <p className="font-medium text-foreground">{formatDate(s.scheduled_at)}</p>

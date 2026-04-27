@@ -55,7 +55,7 @@ function dateKey(y: number, m: number, d: number) {
 
 // ── Day View ──────────────────────────────────────────────────────────────────
 function DayView({
-    date, sessions, doctorColorMap, sessionTypeColorMap, filterDoctor, onAddSession, closureReason,
+    date, sessions, doctorColorMap, sessionTypeColorMap, filterDoctor, onAddSession, closureReason, onSessionClick,
 }: {
     date: Date;
     sessions: Session[];
@@ -64,6 +64,7 @@ function DayView({
     filterDoctor: string;
     onAddSession: () => void;
     closureReason?: string | null;
+    onSessionClick?: (dateTime: string) => void;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const now = new Date();
@@ -178,6 +179,7 @@ function DayView({
 
                         return (
                             <div key={s.id}
+                                onClick={() => onSessionClick?.(s.scheduled_at)}
                                 className={cn(
                                     "absolute left-16 rounded-xl border px-2.5 py-1.5 overflow-hidden cursor-pointer hover:shadow-md transition-shadow z-10",
                                     bgCls
@@ -224,6 +226,7 @@ export default function CalendarPage() {
     const [filterDoctor, setFilterDoctor] = useState<string>("all");
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [selectedDateForModal, setSelectedDateForModal] = useState<string | undefined>();
+    const [selectedTimeForModal, setSelectedTimeForModal] = useState<string | undefined>();
     const [closures, setClosures] = useState<ClinicClosure[]>([]);
     const [closuresLoading, setClosuresLoading] = useState(false);
     const [closureOpen, setClosureOpen] = useState(false);
@@ -301,6 +304,15 @@ export default function CalendarPage() {
         const targetDate = dateKey(viewYear, viewMonth, day);
         if (closuresByDate[targetDate]) return;
         setSelectedDateForModal(targetDate);
+        setSelectedTimeForModal(undefined);
+        setScheduleOpen(true);
+    }
+
+    function openScheduleForDateTime(dateTime: string) {
+        const date = dateTime.slice(0, 10);
+        const time = dateTime.slice(11, 16);
+        setSelectedDateForModal(date);
+        setSelectedTimeForModal(time);
         setScheduleOpen(true);
     }
 
@@ -531,7 +543,7 @@ export default function CalendarPage() {
                                     const color = doctorChipMap[s.doctor_id] ?? "bg-muted-foreground";
                                     const statusCls = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
                                     return (
-                                        <div key={s.id} className="bg-muted/40 rounded-xl p-3 space-y-1.5 hover:bg-muted/60 transition-colors cursor-pointer">
+                                        <div key={s.id} onClick={() => openScheduleForDateTime(s.scheduled_at)} className="bg-muted/40 rounded-xl p-3 space-y-1.5 hover:bg-muted/60 transition-colors cursor-pointer">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <div className={cn("w-2 h-2 rounded-full shrink-0 mt-0.5", color)} />
@@ -627,6 +639,7 @@ export default function CalendarPage() {
                                 setSelectedDateForModal(dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()));
                                 setScheduleOpen(true);
                             }}
+                            onSessionClick={openScheduleForDateTime}
                         />
                     </div>
                 </div>
@@ -634,8 +647,8 @@ export default function CalendarPage() {
 
             <NewSessionModal
                 open={scheduleOpen}
-                onClose={() => { setScheduleOpen(false); setSelectedDateForModal(undefined); }}
-                prefill={selectedDateForModal ? { date: selectedDateForModal } : undefined}
+                onClose={() => { setScheduleOpen(false); setSelectedDateForModal(undefined); setSelectedTimeForModal(undefined); }}
+                prefill={selectedDateForModal ? { date: selectedDateForModal, time: selectedTimeForModal } : undefined}
             />
 
             {closureOpen && (

@@ -103,7 +103,8 @@ export default function StaffPage() {
                 </div>
 
                 <div className="bg-white rounded-2xl overflow-hidden border border-border/50">
-                    <table className="w-full text-sm">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
                         <thead className="border-b border-border/60">
                             <tr>
                                 {["Name", "Role", "Email", "Phone", "Joined", "Status", "Actions"].map(h => (
@@ -185,6 +186,7 @@ export default function StaffPage() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
 
