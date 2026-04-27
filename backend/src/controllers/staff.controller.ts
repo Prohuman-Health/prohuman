@@ -5,6 +5,11 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 
+type PgErrorWithCode = Error & {
+  code?: string;
+  constraint?: string;
+};
+
 export const listStaff = asyncHandler(async (req: Request, res: Response) => {
   const { role, branch_id, is_active = "true" } = req.query as Record<string, string>;
   const conditions = ["1=1"];
@@ -136,13 +141,24 @@ export const deleteAndRevokeStaff = asyncHandler(async (req: Request, res: Respo
     );
   }
 
-  // Use transaction to safely delete staff and associated records.
-  await withTransaction(async (client) => {
-    // Delete doctor record first (if present), then staff record.
-    await client.query("DELETE FROM doctors WHERE staff_id = $1", [id]);
-    // Then delete the staff record
-    await client.query("DELETE FROM staff WHERE id = $1", [id]);
-  });
+  try {
+    // Use transaction to safely delete staff and associated records.
+    await withTransaction(async (client) => {
+      // Delete doctor record first (if present), then staff record.
+      await client.query("DELETE FROM doctors WHERE staff_id = $1", [id]);
+      // Then delete the staff record
+      await client.query("DELETE FROM staff WHERE id = $1", [id]);
+    });
+  } catch (error) {
+    const pgErr = error as PgErrorWithCode;
+    if (pgErr.code === "23503" && pgErr.constraint === "sessions_doctor_id_fkey") {
+      throw ApiError.badRequest(
+        "Cannot delete this staff member because they are still linked to sessions as doctor. " +
+        "Deactivate the account instead to revoke login access."
+      );
+    }
+    throw error;
+  }
 
   ApiResponse.noContent(res);
 });

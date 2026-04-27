@@ -204,6 +204,22 @@ function QuestionModal({
                         </div>
                     )}
 
+                    {/* Question text */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold">Question Text <span className="text-red-500">*</span></label>
+                        <textarea
+                            rows={2}
+                            value={form.text}
+                            onChange={e => update({ text: e.target.value })}
+                            placeholder="e.g. What brings you here today?"
+                            className={cn(
+                                "w-full px-3 py-2.5 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring",
+                                errors.text ? "border-red-400" : "border-input"
+                            )}
+                        />
+                        {errors.text && <p className="text-[11px] text-red-500">{errors.text}</p>}
+                    </div>
+
                     {/* Answer type */}
                     <div className="space-y-1.5">
                         <label className="text-xs font-semibold">Answer Type</label>
@@ -225,22 +241,6 @@ function QuestionModal({
                                 );
                             })}
                         </div>
-                    </div>
-
-                    {/* Question text */}
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-semibold">Question Text <span className="text-red-500">*</span></label>
-                        <textarea
-                            rows={2}
-                            value={form.text}
-                            onChange={e => update({ text: e.target.value })}
-                            placeholder="e.g. What brings you here today?"
-                            className={cn(
-                                "w-full px-3 py-2.5 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring",
-                                errors.text ? "border-red-400" : "border-input"
-                            )}
-                        />
-                        {errors.text && <p className="text-[11px] text-red-500">{errors.text}</p>}
                     </div>
 
                     {/* Section */}
