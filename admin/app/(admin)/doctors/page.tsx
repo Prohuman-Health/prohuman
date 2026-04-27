@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Clock, MoreHorizontal, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Pencil, Trash2, Check } from "lucide-react";
+import { Plus, Search, Clock, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Pencil, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,6 @@ import type { Doctor } from "@/lib/api";
 import { doctorsApi, type DoctorAvailabilitySlot } from "@/lib/api";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 import { NewStaffModal } from "@/components/modals/new-staff-modal";
-import { EditStaffModal } from "@/components/modals/edit-staff-modal";
-import { staffApi, type StaffMember } from "@/lib/api";
 
 const AVATAR_COLORS = [
     "bg-violet-100 text-violet-700", "bg-blue-100 text-blue-700",
@@ -90,8 +88,6 @@ export default function DoctorsPage() {
     const [viewMode, setViewMode] = useState<ViewMode>("profile");
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [addDoctorOpen, setAddDoctorOpen] = useState(false);
-    const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-    const [editingDoctor, setEditingDoctor] = useState<StaffMember | null>(null);
 
     // Availability state
     const [slots, setSlots] = useState<DoctorAvailabilitySlot[]>([]);
@@ -119,12 +115,6 @@ export default function DoctorsPage() {
     useEffect(() => {
         if (selected && viewMode === "availability") loadSlots(selected.id);
     }, [selected, viewMode, loadSlots]);
-
-    useEffect(() => {
-        const handleClickOutside = () => setMenuOpenId(null);
-        document.addEventListener("click", handleClickOutside);
-        return () => document.removeEventListener("click", handleClickOutside);
-    }, []);
 
     async function saveSlot() {
         if (!selected || !slotFormKey) return;
@@ -478,7 +468,7 @@ export default function DoctorsPage() {
                         <table className="w-full text-sm min-w-[580px]">
                             <thead className="border-b border-border sticky top-0 bg-white z-10">
                                 <tr>
-                                    {["Doctor", "Specialty", "Email", "Sessions", "Status", ""].map(h => (
+                                    {["Doctor", "Specialty", "Email", "Sessions", "Status"].map(h => (
                                         <th key={h} className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3.5">{h}</th>
                                     ))}
                                 </tr>
@@ -487,11 +477,11 @@ export default function DoctorsPage() {
                                 {loading ? (
                                     Array.from({ length: 5 }).map((_, i) => (
                                         <tr key={i} className="border-b border-border/60">
-                                            {Array.from({ length: 6 }).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton className="h-4 w-full" /></td>)}
+                                            {Array.from({ length: 5 }).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton className="h-4 w-full" /></td>)}
                                         </tr>
                                     ))
                                 ) : filtered.length === 0 ? (
-                                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">No doctors found</td></tr>
+                                    <tr><td colSpan={5} className="text-center py-12 text-muted-foreground text-sm">No doctors found</td></tr>
                                 ) : filtered.map((d, i) => {
                                     const initials = d.full_name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
                                     const sessionCount = sessionCountByDoctorStaffId[d.staff_id] ?? 0;
@@ -514,53 +504,6 @@ export default function DoctorsPage() {
                                                     d.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-red-200 text-red-600 bg-red-50")}>
                                                     {d.is_active ? "Active" : "Unavailable"}
                                                 </Badge>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <div className="relative">
-                                                    <button 
-                                                        className="text-muted-foreground hover:text-foreground transition-colors" 
-                                                        onClick={e => {
-                                                            e.stopPropagation();
-                                                            setMenuOpenId(menuOpenId === d.id ? null : d.id);
-                                                        }}
-                                                    >
-                                                        <MoreHorizontal className="w-4 h-4" />
-                                                    </button>
-                                                    {menuOpenId === d.id && (
-                                                        <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-border z-50 min-w-[160px]">
-                                                            <button
-                                                                onClick={e => {
-                                                                    e.stopPropagation();
-                                                                    setEditingDoctor({
-                                                                        id: d.id,
-                                                                        staff_id: d.staff_id,
-                                                                        full_name: d.full_name,
-                                                                        email: d.email,
-                                                                        phone: d.phone,
-                                                                        role: "doctor",
-                                                                        is_active: d.is_active,
-                                                                        branch_id: d.branch_id ?? "",
-                                                                        created_at: new Date().toISOString(),
-                                                                    } as StaffMember);
-                                                                    setMenuOpenId(null);
-                                                                }}
-                                                                className="block w-full text-left px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors first:rounded-t-lg"
-                                                            >
-                                                                Edit Doctor
-                                                            </button>
-                                                            <button
-                                                                onClick={e => {
-                                                                    e.stopPropagation();
-                                                                    setSelected(d);
-                                                                    setMenuOpenId(null);
-                                                                }}
-                                                                className="block w-full text-left px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                                                            >
-                                                                View Details
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
                                             </td>
                                         </tr>
                                     );

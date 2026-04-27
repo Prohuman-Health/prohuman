@@ -64,7 +64,7 @@ function DayView({
     filterDoctor: string;
     onAddSession: () => void;
     closureReason?: string | null;
-    onSessionClick?: (dateTime: string) => void;
+    onSessionClick?: (session: Session) => void;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const now = new Date();
@@ -179,7 +179,7 @@ function DayView({
 
                         return (
                             <div key={s.id}
-                                onClick={() => onSessionClick?.(s.scheduled_at)}
+                                onClick={() => onSessionClick?.(s)}
                                 className={cn(
                                     "absolute left-16 rounded-xl border px-2.5 py-1.5 overflow-hidden cursor-pointer hover:shadow-md transition-shadow z-10",
                                     bgCls
@@ -227,6 +227,7 @@ export default function CalendarPage() {
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [selectedDateForModal, setSelectedDateForModal] = useState<string | undefined>();
     const [selectedTimeForModal, setSelectedTimeForModal] = useState<string | undefined>();
+    const [selectedSession, setSelectedSession] = useState<Session | null>(null);
     const [closures, setClosures] = useState<ClinicClosure[]>([]);
     const [closuresLoading, setClosuresLoading] = useState(false);
     const [closureOpen, setClosureOpen] = useState(false);
@@ -308,12 +309,15 @@ export default function CalendarPage() {
         setScheduleOpen(true);
     }
 
-    function openScheduleForDateTime(dateTime: string) {
-        const date = dateTime.slice(0, 10);
-        const time = dateTime.slice(11, 16);
+    function openEmptyTimeSlot(hour: number, date: string) {
+        const time = `${String(hour).padStart(2, "0")}:00`;
         setSelectedDateForModal(date);
         setSelectedTimeForModal(time);
         setScheduleOpen(true);
+    }
+
+    function openExistingSession(session: Session) {
+        setSelectedSession(session);
     }
 
     async function createClosure() {
