@@ -337,6 +337,72 @@ function QuestionModal({
     );
 }
 
+// ── Form preview renderer ─────────────────────────────────────────────────────
+function QuestionPreview({ q }: { q: Question }) {
+    if (q.answer_type === "free_text") {
+        return (
+            <div className="mt-2 w-full max-w-sm h-9 rounded-lg border border-border bg-muted/40 px-3 flex items-center">
+                <span className="text-xs text-muted-foreground/60 select-none">Type your answer…</span>
+            </div>
+        );
+    }
+    if (q.answer_type === "yes_no") {
+        return (
+            <div className="mt-2 flex gap-2">
+                {["Yes", "No"].map(opt => (
+                    <div key={opt} className="px-5 py-1.5 rounded-lg border border-border bg-muted/40 text-xs font-medium text-muted-foreground select-none">
+                        {opt}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    if (q.answer_type === "multiple_choice" && q.options && q.options.length > 0) {
+        return (
+            <div className="mt-2 flex flex-col gap-1.5">
+                {q.options.map((opt, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded border border-border bg-muted/40 shrink-0" />
+                        <span className="text-xs text-muted-foreground">{opt}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    if (q.answer_type === "scale") {
+        const min = q.scale_min ?? 0;
+        const max = q.scale_max ?? 10;
+        const mid = Math.round((min + max) / 2);
+        return (
+            <div className="mt-2 w-full max-w-xs space-y-1">
+                <div className="relative h-2 bg-muted rounded-full border border-border">
+                    <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-border bg-white shadow-sm" />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
+                    <span>{min}</span><span>{mid}</span><span>{max}</span>
+                </div>
+            </div>
+        );
+    }
+    if (q.answer_type === "file_upload") {
+        return (
+            <div className="mt-2 w-full max-w-xs h-14 rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center gap-2">
+                <Paperclip className="w-3.5 h-3.5 text-muted-foreground/60" />
+                <span className="text-xs text-muted-foreground/60 select-none">Attach a file…</span>
+            </div>
+        );
+    }
+    if (q.answer_type === "drawing_pad") {
+        return (
+            <div className="mt-2 w-full max-w-xs h-16 rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center gap-2">
+                <PenLine className="w-3.5 h-3.5 text-muted-foreground/60" />
+                <span className="text-xs text-muted-foreground/60 select-none">Draw here…</span>
+            </div>
+        );
+    }
+    return null;
+}
+
 // ── Section accordion ─────────────────────────────────────────────────────────
 function SectionGroup({
     section,
@@ -381,7 +447,10 @@ function SectionGroup({
                                     <p className={cn("text-sm font-medium", !q.is_active && "line-through text-muted-foreground")}>
                                         {q.text}
                                     </p>
-                                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    <div className="pointer-events-none opacity-70">
+                                        <QuestionPreview q={q} />
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                                         <span className={cn("flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full", meta.color)}>
                                             <Icon className="w-3 h-3" />{meta.label}
                                         </span>
