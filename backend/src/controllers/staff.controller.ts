@@ -101,27 +101,53 @@ export const deleteAndRevokeStaff = asyncHandler(async (req: Request, res: Respo
   // Prevent self-deletion
   if (req.user!.sub === id) throw ApiError.badRequest("You cannot delete your own account");
 
-  const existing = await query("SELECT id FROM staff WHERE id = $1", [id]);
-  if (!existing.rows[0]) throw ApiError.notFound("Staff not found");
+  const staffResult = await query("SELECT id, role FROM staff WHERE id = $1", [id]);
+  if (!staffResult.rows[0]) throw ApiError.notFound("Staff not found");
+  
+  const { role } = staffResult.rows[0];
 
-  // Check for blocking FK references (NOT NULL columns that can't be set to NULL)
+  // For doctors, check if they have any sessions before allowing deletion
+  if (role === "doctor") {
+    const docResult = await query("SELECT id FROM doctors WHERE staff_id = $1", [id]);
+    if (docResult.rows[0]) {
+      const doctorId = docResult.rows[0].id;
+      const sessionsResult = await query("SELECT COUNT(*) FROM sessions WHERE doctor_id = $1", [doctorId]);
+      const sessionCount = parseInt(sessionsResult.rows[0].count, 10);
+      if (sessionCount > 0) {
+        throw ApiError.badRequest(
+          `Cannot delete this doctor. They have ${sessionCount} session(s). ` +
+          "Deactivate the account instead to revoke login access."
+        );
+      }
+    }
+  }
+
+  // Check for other blocking references
   const blocking = await query(
     `SELECT
-       (SELECT COUNT(*) FROM doctors         WHERE staff_id = $1)::int AS doctor_records,
-       (SELECT COUNT(*) FROM sessions        WHERE doctor_id IN (SELECT id FROM doctors WHERE staff_id = $1))::int AS sessions_as_doctor,
        (SELECT COUNT(*) FROM sessions        WHERE created_by  = $1)::int AS sessions_created,
        (SELECT COUNT(*) FROM session_history WHERE changed_by  = $1)::int AS session_history,
        (SELECT COUNT(*) FROM documents       WHERE uploaded_by = $1)::int AS documents`,
     [id]
   );
-  const { doctor_records, sessions_as_doctor, sessions_created, session_history, documents } = blocking.rows[0];
-  if (doctor_records > 0 || sessions_as_doctor > 0 || sessions_created > 0 || session_history > 0 || documents > 0) {
+  const { sessions_created, session_history, documents } = blocking.rows[0];
+  
+  if (sessions_created > 0 || session_history > 0 || documents > 0) {
     throw ApiError.badRequest(
       "Cannot permanently delete this staff member because they have existing records. " +
       "Deactivate the account instead to revoke login access."
     );
   }
 
-  await query("DELETE FROM staff WHERE id = $1", [id]);
+  // Use transaction to safely delete staff and associated records
+  await withTransaction(async (client) => {
+    // If they're a doctor, delete the doctor record first
+    if (role === "doctor") {
+      await client.query("DELETE FROM doctors WHERE staff_id = $1", [id]);
+    }
+    // Then delete the staff record
+    await client.query("DELETE FROM staff WHERE id = $1", [id]);
+  });
+
   ApiResponse.noContent(res);
 });
