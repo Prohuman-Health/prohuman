@@ -15,8 +15,9 @@ import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 const app = express();
 
 // Required when running behind Nginx/Cloudflare/ELB so rate limit and req.ip work correctly.
-const trustProxySetting = env.TRUST_PROXY === true ? 1 : env.TRUST_PROXY;
-app.set("trust proxy", trustProxySetting);
+// parseTrustProxy guarantees this is a number or false — never boolean true,
+// which would trigger ERR_ERL_PERMISSIVE_TRUST_PROXY in express-rate-limit.
+app.set("trust proxy", env.TRUST_PROXY);
 
 // ── Security & Body Parsing ──────────────────────────────────────────────────
 app.use(helmet());
