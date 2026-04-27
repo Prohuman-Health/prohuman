@@ -104,7 +104,7 @@ export default function StaffPage() {
 
                 <div className="bg-white rounded-2xl overflow-hidden border border-border/50">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm min-w-[600px]">
                         <thead className="border-b border-border/60">
                             <tr>
                                 {["Name", "Role", "Email", "Phone", "Joined", "Status", "Actions"].map(h => (

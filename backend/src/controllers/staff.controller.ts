@@ -107,16 +107,17 @@ export const deleteAndRevokeStaff = asyncHandler(async (req: Request, res: Respo
   // Check for blocking FK references (NOT NULL columns that can't be set to NULL)
   const blocking = await query(
     `SELECT
-       (SELECT COUNT(*) FROM sessions        WHERE created_by  = $1)::int AS sessions,
+       (SELECT COUNT(*) FROM doctors         WHERE staff_id = $1)::int AS doctor_records,
+       (SELECT COUNT(*) FROM sessions        WHERE doctor_id IN (SELECT id FROM doctors WHERE staff_id = $1))::int AS sessions_as_doctor,
+       (SELECT COUNT(*) FROM sessions        WHERE created_by  = $1)::int AS sessions_created,
        (SELECT COUNT(*) FROM session_history WHERE changed_by  = $1)::int AS session_history,
        (SELECT COUNT(*) FROM documents       WHERE uploaded_by = $1)::int AS documents`,
     [id]
   );
-  const { sessions, session_history, documents } = blocking.rows[0];
-  if (sessions > 0 || session_history > 0 || documents > 0) {
+  const { doctor_records, sessions_as_doctor, sessions_created, session_history, documents } = blocking.rows[0];
+  if (doctor_records > 0 || sessions_as_doctor > 0 || sessions_created > 0 || session_history > 0 || documents > 0) {
     throw ApiError.badRequest(
-      "Cannot permanently delete this staff member because they have existing records " +
-      `(${sessions} session(s), ${session_history} session history entries, ${documents} document(s)). ` +
+      "Cannot permanently delete this staff member because they have existing records. " +
       "Deactivate the account instead to revoke login access."
     );
   }

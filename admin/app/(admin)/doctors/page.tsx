@@ -539,6 +539,7 @@ export default function DoctorsPage() {
                                                                         phone: d.phone,
                                                                         role: "doctor",
                                                                         is_active: d.is_active,
+                                                                        branch_id: d.branch_id ?? "",
                                                                         created_at: new Date().toISOString(),
                                                                     } as StaffMember);
                                                                     setMenuOpenId(null);
