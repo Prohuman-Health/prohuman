@@ -50,6 +50,7 @@ export const env = {
   GOOGLE_CLIENT_ID: requireEnv("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: requireEnv("GOOGLE_CLIENT_SECRET"),
   GOOGLE_CALLBACK_URL: requireEnv("GOOGLE_CALLBACK_URL"),
+  GCAL_CALLBACK_URL: requireEnv("GCAL_CALLBACK_URL", "http://localhost:5000/api/v1/gcal/callback"),
   FRONTEND_URL: requireEnv("FRONTEND_URL", "http://localhost:3001"),
   TRUST_PROXY: parseTrustProxy(process.env.TRUST_PROXY, process.env.NODE_ENV === "production" ? 1 : false),
   WHATSAPP_ENABLE_REMINDER_SEND: parseBool(process.env.WHATSAPP_ENABLE_REMINDER_SEND, false),
