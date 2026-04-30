@@ -53,6 +53,13 @@ function dateKey(y: number, m: number, d: number) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+function titleCase(value: string) {
+    return value
+        .split("-")
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
 function coerceClosedDates(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return [...new Set(value.filter((v): v is string => typeof v === "string"))].sort((a, b) => a.localeCompare(b));
@@ -72,13 +79,12 @@ type CalendarClosureView = {
 
 // ── Day View ──────────────────────────────────────────────────────────────────
 function DayView({
-    date, sessions, doctorColorMap, sessionTypeColorMap, filterDoctor, onAddSession, closureReason, onSessionClick, onEmptySlotClick,
+    date, sessions, doctorColorMap, sessionTypeColorMap, onAddSession, closureReason, onSessionClick, onEmptySlotClick,
 }: {
     date: Date;
     sessions: Session[];
     doctorColorMap: Record<string, number>;
     sessionTypeColorMap: Record<string, string>;
-    filterDoctor: string;
     onAddSession: () => void;
     closureReason?: string | null;
     onSessionClick?: (session: Session) => void;
@@ -102,8 +108,7 @@ function DayView({
     // Filter sessions for this day
     const daySessions = sessions.filter(s => {
         const d = new Date(s.scheduled_at);
-        return d.toDateString() === date.toDateString() &&
-            (filterDoctor === "all" || s.doctor_id === filterDoctor);
+        return d.toDateString() === date.toDateString();
     });
 
     // Group sessions by their hour slot (handle overlaps with left offset)
@@ -245,6 +250,8 @@ export default function CalendarPage() {
     const [viewMonth, setViewMonth] = useState(today.getMonth());
     const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
     const [filterDoctor, setFilterDoctor] = useState<string>("all");
+    const [filterSessionType, setFilterSessionType] = useState<string>("all");
+    const [filterStatus, setFilterStatus] = useState<string>("all");
     const [filterOpen, setFilterOpen] = useState(false);
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [selectedDateForModal, setSelectedDateForModal] = useState<string | undefined>();
@@ -279,16 +286,39 @@ export default function CalendarPage() {
         return doctors.find((doctor) => doctor.id === filterDoctor) ?? null;
     }, [doctors, filterDoctor]);
 
+    const sessionTypeOptions = useMemo(() => {
+        const names = new Set<string>();
+        sessionTypes.forEach((sessionType) => names.add(sessionType.name));
+        sessions.forEach((session) => names.add(session.session_type_name));
+        return [...names].sort((a, b) => a.localeCompare(b));
+    }, [sessionTypes, sessions]);
+
+    const statusOptions = useMemo(() => {
+        const preferred = ["pending", "confirmed", "completed", "cancelled", "rescheduled", "no-show"];
+        const present = new Set(sessions.map((session) => session.status));
+        const ordered = preferred.filter((status) => present.has(status));
+        const remaining = [...present].filter((status) => !preferred.includes(status)).sort((a, b) => a.localeCompare(b));
+        return [...ordered, ...remaining];
+    }, [sessions]);
+
+    const filteredSessions = useMemo(() => {
+        return sessions.filter((session) => {
+            if (filterDoctor !== "all" && session.doctor_id !== filterDoctor) return false;
+            if (filterSessionType !== "all" && session.session_type_name !== filterSessionType) return false;
+            if (filterStatus !== "all" && session.status !== filterStatus) return false;
+            return true;
+        });
+    }, [sessions, filterDoctor, filterSessionType, filterStatus]);
+
     const sessionsByDate = useMemo(() => {
         const map: Record<string, Session[]> = {};
-        sessions.filter(s => filterDoctor === "all" || s.doctor_id === filterDoctor)
-            .forEach(s => {
+        filteredSessions.forEach(s => {
                 const key = s.scheduled_at.slice(0, 10);
                 if (!map[key]) map[key] = [];
                 map[key].push(s);
             });
         return map;
-    }, [sessions, filterDoctor]);
+    }, [filteredSessions]);
 
     const daysInMonth = getDaysInMonth(viewYear, viewMonth);
     const firstDay = getFirstDay(viewYear, viewMonth);
@@ -368,6 +398,8 @@ export default function CalendarPage() {
         return Object.values(closuresByDate).sort((a, b) => a.closure_date.localeCompare(b.closure_date));
     }, [closuresByDate]);
 
+    const activeFilterCount = [filterDoctor, filterSessionType, filterStatus].filter((value) => value !== "all").length;
+
     const selectedKey = selectedDay ? dateKey(viewYear, viewMonth, selectedDay) : null;
     const selectedClosure = selectedKey ? closuresByDate[selectedKey] : undefined;
     const selectedSessions = (selectedKey ? (sessionsByDate[selectedKey] ?? []) : [])
@@ -407,7 +439,7 @@ export default function CalendarPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">{sessions.length} sessions this period</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">{filteredSessions.length} of {sessions.length} sessions in view</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {/* View toggle */}
@@ -437,9 +469,14 @@ export default function CalendarPage() {
             <div className="flex items-center justify-between gap-3 shrink-0">
                 <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filters</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        {activeDoctor ? `Doctor: ${activeDoctor.full_name}` : "Showing sessions for all doctors"}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                        <span className="text-sm text-muted-foreground">
+                            {activeFilterCount === 0 ? "Showing all sessions" : `${activeFilterCount} active filter${activeFilterCount !== 1 ? "s" : ""}`}
+                        </span>
+                        {activeDoctor && <Badge variant="outline" className="rounded-full text-[10px] px-2.5">{activeDoctor.full_name}</Badge>}
+                        {filterSessionType !== "all" && <Badge variant="outline" className="rounded-full text-[10px] px-2.5">{filterSessionType}</Badge>}
+                        {filterStatus !== "all" && <Badge variant="outline" className="rounded-full text-[10px] px-2.5">{titleCase(filterStatus)}</Badge>}
+                    </div>
                 </div>
                 <button
                     onClick={() => setFilterOpen(true)}
@@ -618,7 +655,7 @@ export default function CalendarPage() {
                                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Doctors</p>
                                 {doctors.slice(0, 6).map((d, i) => (
                                     <div key={d.id} className="flex items-center gap-2 cursor-pointer"
-                                        onClick={() => setFilterDoctor(filterDoctor === d.id ? "all" : d.id)}>
+                                        >
                                         <div className={cn("w-2 h-2 rounded-full shrink-0", CHIP_COLORS[i % CHIP_COLORS.length],
                                             filterDoctor !== "all" && filterDoctor !== d.id ? "opacity-30" : "")} />
                                         <span className={cn("text-xs truncate", filterDoctor !== "all" && filterDoctor !== d.id ? "text-muted-foreground/40" : "text-muted-foreground")}>
@@ -675,10 +712,9 @@ export default function CalendarPage() {
                     <div className="flex-1 min-h-[600px]">
                         <DayView
                             date={selectedDate}
-                            sessions={sessions}
+                            sessions={filteredSessions}
                             doctorColorMap={doctorColorMap}
                             sessionTypeColorMap={sessionTypeColorMap}
-                            filterDoctor={filterDoctor}
                             closureReason={selectedClosure?.reason ?? (selectedClosure ? "" : undefined)}
                             onAddSession={() => {
                                 setSelectedDateForModal(dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()));
@@ -700,11 +736,11 @@ export default function CalendarPage() {
             {filterOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFilterOpen(false)} />
-                    <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+                    <div className="relative w-full max-w-5xl rounded-2xl bg-white shadow-2xl overflow-hidden">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
                             <div>
                                 <h3 className="font-bold text-sm">Calendar Filters</h3>
-                                <p className="text-xs text-muted-foreground mt-0.5">Choose which doctor&apos;s sessions to show.</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Filter by doctor, session type, and status.</p>
                             </div>
                             <button
                                 onClick={() => setFilterOpen(false)}
@@ -714,52 +750,134 @@ export default function CalendarPage() {
                             </button>
                         </div>
 
-                        <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
-                            <button
-                                onClick={() => setFilterDoctor("all")}
-                                className={cn(
-                                    "w-full flex items-center justify-between rounded-xl border px-3.5 py-3 text-sm transition-colors",
-                                    filterDoctor === "all"
-                                        ? "border-foreground bg-foreground text-white"
-                                        : "border-border bg-white text-foreground hover:bg-muted"
-                                )}
-                            >
-                                <span className="font-medium">All Doctors</span>
-                                <span className={cn("text-xs", filterDoctor === "all" ? "text-white/80" : "text-muted-foreground")}>No doctor filter</span>
-                            </button>
-
-                            <div className="space-y-2">
-                                {doctors.map((doctor, index) => {
-                                    const isActive = filterDoctor === doctor.id;
-                                    return (
+                        <div className="p-5 max-h-[70vh] overflow-y-auto">
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                                <div className="rounded-2xl border border-border/70 p-4 space-y-3">
+                                    <div>
+                                        <h4 className="text-sm font-semibold">Doctor</h4>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Show sessions for one doctor or everyone.</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
                                         <button
-                                            key={doctor.id}
-                                            onClick={() => setFilterDoctor(doctor.id)}
+                                            onClick={() => setFilterDoctor("all")}
                                             className={cn(
-                                                "w-full flex items-center justify-between rounded-xl border px-3.5 py-3 text-left transition-colors",
-                                                isActive
+                                                "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border",
+                                                filterDoctor === "all"
                                                     ? "border-foreground bg-foreground text-white"
-                                                    : "border-border bg-white text-foreground hover:bg-muted"
+                                                    : "border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted"
                                             )}
                                         >
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", CHIP_COLORS[index % CHIP_COLORS.length])} />
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium truncate">{doctor.full_name}</p>
-                                                    <p className={cn("text-xs truncate", isActive ? "text-white/80" : "text-muted-foreground")}>
-                                                        {doctor.specialty || "Doctor"}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {isActive && <span className="text-xs font-medium">Selected</span>}
+                                            All Doctors
                                         </button>
-                                    );
-                                })}
+                                        {doctors.map((doctor, index) => {
+                                            const isActive = filterDoctor === doctor.id;
+                                            return (
+                                                <button
+                                                    key={doctor.id}
+                                                    onClick={() => setFilterDoctor(doctor.id)}
+                                                    className={cn(
+                                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border",
+                                                        isActive
+                                                            ? "border-foreground bg-foreground text-white"
+                                                            : "border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                    )}
+                                                >
+                                                    <span className={cn("w-2 h-2 rounded-full", CHIP_COLORS[index % CHIP_COLORS.length])} />
+                                                    {doctor.full_name.replace("Dr. ", "")}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-border/70 p-4 space-y-3">
+                                    <div>
+                                        <h4 className="text-sm font-semibold">Session Type</h4>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Focus on one kind of appointment.</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setFilterSessionType("all")}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border",
+                                                filterSessionType === "all"
+                                                    ? "border-foreground bg-foreground text-white"
+                                                    : "border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted"
+                                            )}
+                                        >
+                                            All Types
+                                        </button>
+                                        {sessionTypeOptions.map((sessionType) => {
+                                            const isActive = filterSessionType === sessionType;
+                                            return (
+                                                <button
+                                                    key={sessionType}
+                                                    onClick={() => setFilterSessionType(sessionType)}
+                                                    className={cn(
+                                                        "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border",
+                                                        isActive
+                                                            ? "border-foreground bg-foreground text-white"
+                                                            : "border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                    )}
+                                                >
+                                                    {sessionType}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-border/70 p-4 space-y-3">
+                                    <div>
+                                        <h4 className="text-sm font-semibold">Status</h4>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Narrow the view by booking status.</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setFilterStatus("all")}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border",
+                                                filterStatus === "all"
+                                                    ? "border-foreground bg-foreground text-white"
+                                                    : "border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted"
+                                            )}
+                                        >
+                                            All Statuses
+                                        </button>
+                                        {statusOptions.map((status) => {
+                                            const isActive = filterStatus === status;
+                                            return (
+                                                <button
+                                                    key={status}
+                                                    onClick={() => setFilterStatus(status)}
+                                                    className={cn(
+                                                        "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border capitalize",
+                                                        isActive
+                                                            ? "border-foreground bg-foreground text-white"
+                                                            : "border-border bg-white text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                    )}
+                                                >
+                                                    {titleCase(status)}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div className="px-5 py-4 border-t border-border/60 flex items-center justify-between gap-3">
-                            <Button variant="outline" className="rounded-xl" onClick={() => setFilterDoctor("all")}>Reset</Button>
+                            <Button
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={() => {
+                                    setFilterDoctor("all");
+                                    setFilterSessionType("all");
+                                    setFilterStatus("all");
+                                }}
+                            >
+                                Reset
+                            </Button>
                             <Button className="rounded-xl" onClick={() => setFilterOpen(false)}>Apply Filters</Button>
                         </div>
                     </div>

@@ -1,6 +1,14 @@
-import { Router } from "express";
+import { NextFunction, Request, Response, Router } from "express";
 import passport from "passport";
-import { login, me, changePassword, googleCallback } from "../controllers/auth.controller";
+import {
+  changePassword,
+  googleCallback,
+  googleFailed,
+  login,
+  me,
+  OAUTH_REDIRECT_COOKIE,
+  oauthRedirectCookieOptions,
+} from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { z } from "zod";
@@ -20,6 +28,37 @@ export const changePasswordSchema = z.object({
 
 const router = Router();
 
+function normalizeAbsoluteOrigin(value?: string): string | null {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function getRequestOrigin(req: Request): string | null {
+  return normalizeAbsoluteOrigin(req.get("origin") ?? req.get("referer") ?? undefined);
+}
+
+function captureFrontendRedirectOrigin(req: Request, res: Response, next: NextFunction) {
+  const requestedRedirect = typeof req.query.redirect_uri === "string"
+    ? normalizeAbsoluteOrigin(req.query.redirect_uri)
+    : null;
+  const requestOrigin = getRequestOrigin(req);
+
+  if (requestedRedirect && requestOrigin && requestedRedirect === requestOrigin) {
+    res.cookie(OAUTH_REDIRECT_COOKIE, requestedRedirect, oauthRedirectCookieOptions);
+  } else {
+    res.clearCookie(OAUTH_REDIRECT_COOKIE, oauthRedirectCookieOptions);
+  }
+
+  next();
+}
+
 // ── Email / password ──────────────────────────────────────────────────────────
 router.post("/login", validate(loginSchema), login);
 router.get("/me", authenticate, me);
@@ -29,6 +68,7 @@ router.patch("/me/password", authenticate, validate(changePasswordSchema), chang
 // Step 1 — frontend redirects user here to initiate the Google consent screen
 router.get(
   "/google",
+  captureFrontendRedirectOrigin,
   passport.authenticate("google", { scope: ["profile", "email"], session: false })
 );
 
@@ -43,8 +83,6 @@ router.get(
 );
 
 // Fallback error page (in case Passport's failureRedirect is hit)
-router.get("/google/failed", (_req, res) => {
-  res.status(401).json({ success: false, message: "Google authentication failed" });
-});
+router.get("/google/failed", googleFailed);
 
 export default router;

@@ -50,7 +50,7 @@ function LoginInner() {
     };
 
     const handleGoogleLogin = () => {
-        window.location.href = api.googleUrl();
+        window.location.href = api.googleUrl(window.location.origin);
     };
 
     if (loading) {

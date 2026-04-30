@@ -12,6 +12,12 @@ export const authApi = {
         request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
     me: () => request<StaffUser>("/auth/me"),
     /** Browser navigates here directly to start Google OAuth */
-    googleUrl: (): string =>
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1"}/auth/google`,
+    googleUrl: (redirectOrigin?: string): string => {
+        const baseUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1"}/auth/google`;
+        if (!redirectOrigin) return baseUrl;
+
+        const url = new URL(baseUrl);
+        url.searchParams.set("redirect_uri", redirectOrigin);
+        return url.toString();
+    },
 };

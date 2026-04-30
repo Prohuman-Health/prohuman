@@ -7,6 +7,51 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 
+export const OAUTH_REDIRECT_COOKIE = "oauth_redirect_origin";
+
+export const oauthRedirectCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: env.NODE_ENV === "production",
+  path: "/api/v1/auth",
+  maxAge: 10 * 60 * 1000,
+};
+
+function parseCookieHeader(cookieHeader?: string): Record<string, string> {
+  if (!cookieHeader) return {};
+
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((cookies, part) => {
+      const separatorIndex = part.indexOf("=");
+      if (separatorIndex <= 0) return cookies;
+
+      const key = part.slice(0, separatorIndex).trim();
+      const value = part.slice(separatorIndex + 1).trim();
+      cookies[key] = decodeURIComponent(value);
+      return cookies;
+    }, {});
+}
+
+function normalizeAbsoluteOrigin(value?: string): string | null {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveFrontendBaseUrl(req: Request): string {
+  const cookies = parseCookieHeader(req.headers.cookie);
+  return normalizeAbsoluteOrigin(cookies[OAUTH_REDIRECT_COOKIE]) ?? env.FRONTEND_URL;
+}
+
 // ── Helper: mint a JWT for any staff row ─────────────────────────────────────
 function mintToken(staff: { id: string; role: string; branch_id: string | null }) {
   return jwt.sign(
@@ -43,13 +88,22 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 // Called by Passport after Google verifies the user.
 // Issues a JWT and redirects the browser to the frontend.
 export const googleCallback = (req: Request, res: Response) => {
+  const frontendBaseUrl = resolveFrontendBaseUrl(req);
+  res.clearCookie(OAUTH_REDIRECT_COOKIE, oauthRedirectCookieOptions);
+
   const staff = req.user as { id: string; role: string; branch_id: string | null } | undefined;
   if (!staff) {
-    return res.redirect(`${env.FRONTEND_URL}/auth/error?reason=google_failed`);
+    return res.redirect(`${frontendBaseUrl}/login?error=google_failed`);
   }
   const token = mintToken(staff);
   // Redirect frontend — it reads ?token= from the URL, stores it, then goes to /dashboard
-  res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${token}`);
+  res.redirect(`${frontendBaseUrl}/auth/callback?token=${token}`);
+};
+
+export const googleFailed = (req: Request, res: Response) => {
+  const frontendBaseUrl = resolveFrontendBaseUrl(req);
+  res.clearCookie(OAUTH_REDIRECT_COOKIE, oauthRedirectCookieOptions);
+  res.redirect(`${frontendBaseUrl}/login?error=google_failed`);
 };
 
 // ── Current user ──────────────────────────────────────────────────────────────
