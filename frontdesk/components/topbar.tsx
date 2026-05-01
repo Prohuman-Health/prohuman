@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, Bell, Mail, Menu, LogOut, ChevronLeft, CheckCheck, Inbox } from "lucide-react";
+import { Search, Bell, Mail, Menu, LogOut, ChevronLeft, CheckCheck, Inbox, CalendarDays } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth-context";
 import { GlobalSearch } from "@/components/global-search";
@@ -241,6 +241,14 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
             {/* Right */}
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                {/* Calendar shortcut */}
+                <button
+                    onClick={() => router.push("/calendar")}
+                    title="Calendar"
+                    className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors hidden sm:flex"
+                >
+                    <CalendarDays className="w-4 h-4" />
+                </button>
                 {/* Mail */}
                 <div className="relative hidden sm:block">
                     <button

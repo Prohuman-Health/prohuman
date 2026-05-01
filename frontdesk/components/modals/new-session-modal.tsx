@@ -15,7 +15,7 @@ import { sessionsApi, branchesApi, Branch } from "@/lib/api";
 interface Props {
     open: boolean;
     onClose: () => void;
-    prefill?: { patientId?: string; doctorId?: string; date?: string };
+    prefill?: { patientId?: string; doctorId?: string; date?: string; time?: string };
 }
 
 export function NewSessionModal({ open, onClose, prefill }: Props) {
@@ -40,7 +40,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         doctor_id: prefill?.doctorId ?? "",
         session_type_id: "",
         date: prefill?.date ?? todayStr,
-        time: "09:00",
+        time: prefill?.time ?? "09:00",
         notes: "",
         branch_id: user?.branch_id ?? "",
     });
