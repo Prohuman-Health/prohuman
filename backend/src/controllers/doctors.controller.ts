@@ -5,16 +5,26 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 
 export const listDoctors = asyncHandler(async (req: Request, res: Response) => {
-  const { branch_id } = req.query as Record<string, string>;
-  let sql = `
+  const { branch_id, is_active = "true" } = req.query as Record<string, string>;
+  const conditions: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+
+  // Default: return only active doctors (is_active=true); pass is_active=false to list inactive ones
+  conditions.push(`s.is_active = $${i++}`);
+  vals.push(is_active !== "false");
+
+  if (branch_id) { conditions.push(`s.branch_id = $${i++}`); vals.push(branch_id); }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = `
     SELECT d.id, d.specialty, d.bio,
            s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active
     FROM doctors d
     JOIN staff s ON s.id = d.staff_id
+    ${where}
+    ORDER BY s.full_name
   `;
-  const vals: unknown[] = [];
-  if (branch_id) { sql += " WHERE s.branch_id = $1"; vals.push(branch_id); }
-  sql += " ORDER BY s.full_name";
   const result = await query(sql, vals);
   ApiResponse.ok(res, result.rows);
 });

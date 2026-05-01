@@ -50,8 +50,15 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!open) return;
         // Reset success/error on open
         setErrors({}); setApiError(null); setSuccess(false);
-        // Pre-fill branch from user if available
-        setForm(prev => ({ ...prev, branch_id: user?.branch_id ?? "" }));
+        // Re-apply prefill (date/time may have changed since last open)
+        setForm(prev => ({
+            ...prev,
+            branch_id: user?.branch_id ?? prev.branch_id,
+            date: prefill?.date ?? todayStr,
+            time: prefill?.time ?? "09:00",
+            ...(prefill?.patientId ? { patient_id: prefill.patientId } : {}),
+            ...(prefill?.doctorId  ? { doctor_id:  prefill.doctorId  } : {}),
+        }));
 
         if (!user?.branch_id) {
             setBranchesLoading(true);
@@ -64,7 +71,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                 .catch(() => {/* silent */ })
                 .finally(() => setBranchesLoading(false));
         }
-    }, [open, user?.branch_id]);
+    }, [open, user?.branch_id, prefill?.date, prefill?.time, prefill?.patientId, prefill?.doctorId, todayStr]);
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -190,6 +197,9 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                 <option value="">Select doctor…</option>
                                 {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</option>)}
                             </select>
+                            {doctors.length === 0 && (
+                                <p className="text-[11px] text-amber-600 font-medium mt-1">No active doctors found. Please add a doctor in the admin panel.</p>
+                            )}
                         </Field>
 
                         <Field label="Session Type" required error={errors.session_type_id}>
