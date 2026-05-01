@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Clock, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Clock, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Plus, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ function Skeleton({ className }: { className?: string }) {
 type ViewMode = "profile" | "calendar" | "schedule";
 
 export default function DoctorsPage() {
+    const router = useRouter();
     const { doctors, loading, refresh } = useStaff();
     const { sessions } = useSessions();
 
@@ -121,56 +123,54 @@ export default function DoctorsPage() {
 
         return (
             <div className={cn("flex flex-col overflow-hidden", mobile ? "h-full" : "flex-1")}>
-                {/* Tabs */}
-                <div className="flex items-center gap-2 px-5 py-4 border-b border-border/60">
-                    <div className="min-w-0 flex-1 overflow-x-auto">
-                        <div className="inline-flex items-center gap-1 bg-muted rounded-xl p-1">
-                            {([
-                                ["profile", <User key="u" className="w-3 h-3" />, "Profile"],
-                                ["calendar", <CalendarDays key="c" className="w-3 h-3" />, "Calendar"],
-                                ["schedule", <Clock key="cl" className="w-3 h-3" />, "Schedule"],
-                            ] as const).map(([mode, Icon, label]) => (
-                                <button key={mode} onClick={() => setViewMode(mode)}
-                                    className={cn("flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
-                                        viewMode === mode ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                                    {Icon} {label}
-                                </button>
-                            ))}
-                        </div>
+                {/* Compact header: avatar + name + close */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-border/60">
+                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0", AVATAR_COLORS[idx % AVATAR_COLORS.length])}>
+                        {initials}
                     </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{selected.full_name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{selected.specialty ?? "No specialty"}</p>
+                    </div>
+                    <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 font-medium shrink-0",
+                        selected.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-red-200 text-red-600 bg-red-50")}>
+                        {selected.is_active ? "Active" : "Inactive"}
+                    </Badge>
                     <button onClick={() => setSelected(null)}
                         className="w-6 h-6 shrink-0 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                         <X className="w-3 h-3" />
                     </button>
                 </div>
 
+                {/* Full-width tabs */}
+                <div className="px-4 py-2.5 border-b border-border/60">
+                    <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
+                        {([
+                            ["profile", <User key="u" className="w-3 h-3" />, "Profile"],
+                            ["calendar", <CalendarDays key="c" className="w-3 h-3" />, "Calendar"],
+                            ["schedule", <Clock key="cl" className="w-3 h-3" />, "Schedule"],
+                        ] as const).map(([mode, Icon, label]) => (
+                            <button key={mode} onClick={() => setViewMode(mode)}
+                                className={cn("flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                    viewMode === mode ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                                {Icon} {label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
                 {/* Profile */}
                 {viewMode === "profile" && (
-                    <div className="p-5 space-y-5 flex-1 overflow-y-auto">
-                        <div className="flex flex-col items-center text-center gap-2.5">
-                            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold", AVATAR_COLORS[idx % AVATAR_COLORS.length])}>
-                                {initials}
-                            </div>
-                            <div>
-                                <p className="font-bold text-base">{selected.full_name}</p>
-                                {selected.specialty && <p className="text-xs text-muted-foreground mt-0.5">{selected.specialty}</p>}
-                            </div>
-                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium capitalize",
-                                selected.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-red-200 text-red-600 bg-red-50")}>
-                                {selected.is_active ? "Active" : "Unavailable"}
-                            </Badge>
-                        </div>
-
+                    <div className="p-4 space-y-4 flex-1 overflow-y-auto">
                         <div className="bg-muted/50 rounded-xl p-3.5 space-y-3">
                             {[
                                 ["Email", selected.email],
                                 ["Phone", selected.phone ?? "—"],
-                                ["Specialty", selected.specialty ?? "—"],
-                                ["Sessions (loaded)", String(sessionCountByDoctorStaffId[selected.staff_id] ?? 0)],
+                                ["Sessions", String(sessionCountByDoctorStaffId[selected.staff_id] ?? 0)],
                             ].map(([label, value]) => (
                                 <div key={label}>
                                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{label}</p>
-                                    <p className="text-xs font-medium mt-0.5">{value}</p>
+                                    <p className="text-xs font-medium mt-0.5 break-all">{value}</p>
                                 </div>
                             ))}
                         </div>
@@ -182,20 +182,14 @@ export default function DoctorsPage() {
                             </div>
                         )}
 
-                        <div className="space-y-2">
-                            <button onClick={() => setViewMode("calendar")}
-                                className="w-full h-9 rounded-xl border border-border text-xs font-medium hover:bg-muted/50 transition-colors">
-                                View Calendar
-                            </button>
-                            <button onClick={() => setViewMode("schedule")}
-                                className="w-full h-9 rounded-xl border border-border text-xs font-medium hover:bg-muted/50 transition-colors">
-                                View Schedule
-                            </button>
-                            <button onClick={() => setScheduleOpen(true)}
-                                className="w-full h-9 rounded-xl bg-foreground text-white text-xs font-medium hover:bg-foreground/90 transition-colors">
-                                Schedule Session
-                            </button>
-                        </div>
+                        <button onClick={() => router.push(`/doctors/${selected.id}`)}
+                            className="w-full h-9 rounded-xl border border-border text-xs font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
+                            <ExternalLink className="w-3.5 h-3.5" /> View Details
+                        </button>
+                        <button onClick={() => setScheduleOpen(true)}
+                            className="w-full h-9 rounded-xl bg-foreground text-white text-xs font-medium hover:bg-foreground/90 transition-colors">
+                            Schedule Session
+                        </button>
                     </div>
                 )}
 

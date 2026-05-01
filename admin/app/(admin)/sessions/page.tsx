@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
     Search, RefreshCw, CalendarDays, X, Loader2, FileText,
     CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
-    ClipboardList, UserX, ChevronDown,
+    ClipboardList, UserX, ChevronDown, ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -583,6 +584,13 @@ export default function SessionsPage() {
                             title="Open session form">
                             <ClipboardList className="w-3.5 h-3.5" /> Form
                         </button>
+                        <Link
+                            href={`/sessions/${s.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground font-medium transition-colors"
+                            title="View session details">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
                         {!TERMINAL.has(s.status) && (
                             <button
                                 onClick={async e => { e.stopPropagation(); await sessionsApi.markAttendance(s.id, "attended"); refresh(); }}

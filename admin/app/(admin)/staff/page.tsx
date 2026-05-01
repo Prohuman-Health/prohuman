@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, Search, RefreshCw, UserCheck, UserX, Pencil, Trash2, ShieldOff } from "lucide-react";
+import { Plus, Search, RefreshCw, UserCheck, UserX, Pencil, Trash2, ShieldOff, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -149,6 +150,13 @@ export default function StaffPage() {
                                     </td>
                                     <td className="px-5 py-4">
                                         <div className="flex items-center gap-1">
+                                            {/* View details */}
+                                            <Link href={`/staff/${s.id}`}
+                                                onClick={e => e.stopPropagation()}
+                                                title="View details"
+                                                className="p-1.5 text-muted-foreground hover:text-[#2493A2] transition-colors rounded-lg hover:bg-muted">
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                            </Link>
                                             {/* Edit button */}
                                             <button
                                                 onClick={e => { e.stopPropagation(); setEditingStaff(s); }}
