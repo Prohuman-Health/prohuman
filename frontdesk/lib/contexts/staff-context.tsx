@@ -10,74 +10,55 @@ import {
     createContext, useContext, useState, useCallback,
     useRef, useEffect, ReactNode, useMemo,
 } from "react";
-import { staffApi, doctorsApi, StaffMember, Doctor } from "@/lib/api";
+import { doctorsApi, Doctor } from "@/lib/api";
+// StaffMember is not used in frontdesk — staff management is admin-only
 
 const STALE_MS = 5 * 60_000;
 
 interface StaffState {
-    staff: StaffMember[];
     doctors: Doctor[];
     loading: boolean;
     error: string | null;
-    showInactive: boolean;
 }
 
 interface StaffContextValue extends StaffState {
-    setShowInactive: (v: boolean) => void;
     refresh: () => Promise<void>;
     /** Lookup map: doctor_id → Doctor */
     doctorMap: Record<string, Doctor>;
-    createStaff: (data: Omit<StaffMember, "id" | "created_at"> & { password: string }) => Promise<StaffMember>;
 }
 
 const StaffContext = createContext<StaffContextValue | null>(null);
 
 export function StaffProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<StaffState>({
-        staff: [], doctors: [], loading: false, error: null, showInactive: false,
+        doctors: [], loading: false, error: null,
     });
     const lastFetchAt = useRef<number>(0);
 
-    const load = useCallback(async (showInactive: boolean, force = false) => {
+    const load = useCallback(async (force = false) => {
         if (!force && Date.now() - lastFetchAt.current < STALE_MS) return;
 
         setState(prev => ({ ...prev, loading: true, error: null }));
         try {
-            const [staffData, doctorsData] = await Promise.all([
-                staffApi.list({ is_active: showInactive ? "false" : "true" }),
-                doctorsApi.list(),
-            ]);
+            const doctors = await doctorsApi.list();
             lastFetchAt.current = Date.now();
-            setState(prev => ({ ...prev, staff: staffData, doctors: doctorsData, loading: false }));
+            setState(prev => ({ ...prev, doctors, loading: false }));
         } catch (e: unknown) {
-            setState(prev => ({ ...prev, loading: false, error: e instanceof Error ? e.message : "Failed to load" }));
+            setState(prev => ({ ...prev, loading: false, error: e instanceof Error ? e.message : "Failed to load doctors" }));
         }
     }, []);
 
-    const setShowInactive = useCallback((v: boolean) => {
-        setState(prev => ({ ...prev, showInactive: v }));
-        load(v, true);
-    }, [load]);
-
-    const refresh = useCallback(() => new Promise<void>((resolve) => {
-        setState(prev => { load(prev.showInactive, true).then(resolve); return prev; });
-    }), [load]);
-
-    const createStaff = useCallback(async (data: Omit<StaffMember, "id" | "created_at"> & { password: string }) => {
-        const member = await staffApi.create(data as Parameters<typeof staffApi.create>[0]);
-        await refresh();
-        return member;
-    }, [refresh]);
+    const refresh = useCallback(() => load(true), [load]);
 
     const doctorMap = useMemo(() =>
         Object.fromEntries(state.doctors.map(d => [d.id, d])),
         [state.doctors]
     );
 
-    useEffect(() => { load(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
-        <StaffContext.Provider value={{ ...state, setShowInactive, refresh, doctorMap, createStaff }}>
+        <StaffContext.Provider value={{ ...state, refresh, doctorMap }}>
             {children}
         </StaffContext.Provider>
     );
