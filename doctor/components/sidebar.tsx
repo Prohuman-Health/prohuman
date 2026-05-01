@@ -4,14 +4,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-    LayoutDashboard, CalendarDays, LogOut, X,
+    LayoutDashboard, CalendarDays, LogOut, X, ClipboardList, Users, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
 const menuItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/schedule", label: "My Schedule", icon: CalendarDays },
+    { href: "/dashboard",  label: "Dashboard",   icon: LayoutDashboard },
+    { href: "/schedule",   label: "My Schedule",  icon: CalendarDays },
+    { href: "/sessions",   label: "Sessions",     icon: ClipboardList },
+    { href: "/patients",   label: "Patients",     icon: Users },
+    { href: "/profile",    label: "My Profile",   icon: UserCircle },
 ];
 
 interface SidebarProps {

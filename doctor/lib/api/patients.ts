@@ -21,7 +21,15 @@ export interface TimelineItem {
     status?: string; amount?: number; category?: string;
 }
 
+export interface PatientListResponse {
+    patients: Patient[];
+    total: number;
+    page: number;
+}
+
 export const patientsApi = {
+    list: (params?: Record<string, string>) =>
+        request<PatientListResponse>(`/patients?${new URLSearchParams(params)}`),
     get: (id: string) => request<Patient>(`/patients/${id}`),
     sessions: (id: string) => request<PatientSession[]>(`/patients/${id}/sessions`),
     timeline: (id: string) => request<TimelineItem[]>(`/patients/${id}/timeline`),
