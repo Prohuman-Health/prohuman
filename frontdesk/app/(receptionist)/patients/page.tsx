@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Search, Plus, ChevronRight, RefreshCw, X, User, Phone, Mail, Calendar, Hash, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ function Skeleton({ className }: { className?: string }) {
 }
 
 export default function PatientsPage() {
+    const router = useRouter();
     const { patients, total, loading, filter, page, search, setFilter, setPage, setSearch, refresh } = usePatients();
     const [selected, setSelected] = useState<Patient | null>(null);
     const [newPatientOpen, setNewPatientOpen] = useState(false);
@@ -155,7 +157,7 @@ export default function PatientsPage() {
                                         {search ? "No patients match your search" : "No patients registered yet"}
                                     </td></tr>
                                 ) : filtered.map((p, i) => (
-                                    <tr key={p.id} onClick={() => setSelected(selected?.id === p.id ? null : p)}
+                                    <tr key={p.id} onClick={() => router.push(`/patients/${p.id}`)}
                                         className={cn("border-b border-border/60 cursor-pointer transition-colors hover:bg-muted/30", selected?.id === p.id && "bg-muted/50")}>
                                         <td className="px-5 py-3.5">
                                             <div className="flex items-center gap-3">
