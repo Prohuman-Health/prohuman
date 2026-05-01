@@ -17,4 +17,5 @@ export * from "./whatsapp";
 export * from "./branches";
 export * from "./inbox";
 export * from "./patientLabels";
+export * from "./invoices";
 

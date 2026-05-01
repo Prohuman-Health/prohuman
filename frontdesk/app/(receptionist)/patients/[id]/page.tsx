@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-    patientsApi, patientLabelsApi,
+    patientsApi, patientLabelsApi, invoicesApi,
     Patient, PatientSession, PatientInvoice, TimelineItem, PatientLabel,
 } from "@/lib/api";
 import { EditPatientModal } from "@/components/modals/edit-patient-modal";
@@ -157,13 +157,38 @@ function InvoicesTab({ patientId }: { patientId: string }) {
     const [invoices, setInvoices] = useState<PatientInvoice[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [editId, setEditId] = useState<string | null>(null);
+    const [editStatus, setEditStatus] = useState<"pending" | "paid" | "waived">("pending");
+    const [editNotes, setEditNotes] = useState("");
+    const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        patientsApi.invoices(patientId)
-            .then(d => setInvoices(d))
-            .catch(() => setError("Failed to load invoices"))
-            .finally(() => setLoading(false));
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const d = await patientsApi.invoices(patientId);
+            setInvoices(d);
+        } catch {
+            setError("Failed to load invoices");
+        } finally { setLoading(false); }
     }, [patientId]);
+
+    useEffect(() => { load(); }, [load]);
+
+    async function saveEdit() {
+        if (!editId) return;
+        setSaving(true);
+        try {
+            await invoicesApi.update(editId, { status: editStatus, notes: editNotes || undefined });
+            setEditId(null);
+            await load();
+        } catch { /* ignore */ } finally { setSaving(false); }
+    }
+
+    function startEdit(inv: PatientInvoice) {
+        setEditId(inv.id);
+        setEditStatus((inv.status as "pending" | "paid" | "waived") ?? "pending");
+        setEditNotes(inv.notes ?? "");
+    }
 
     if (loading) return <div className="space-y-3 p-1">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>;
     if (error) return (
@@ -173,7 +198,7 @@ function InvoicesTab({ patientId }: { patientId: string }) {
     );
 
     const total = invoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-    const unpaid = invoices.filter(i => i.status === "unpaid").reduce((s, i) => s + Number(i.amount), 0);
+    const pending = invoices.filter(i => i.status === "pending" || i.status === "unpaid").reduce((s, i) => s + Number(i.amount), 0);
 
     return (
         <div className="space-y-3">
@@ -186,10 +211,10 @@ function InvoicesTab({ patientId }: { patientId: string }) {
                     </div>
                     <div className="bg-white rounded-xl border border-border/50 p-4">
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Outstanding</p>
-                        <p className={cn("text-xl font-bold mt-1", unpaid > 0 ? "text-red-600" : "text-emerald-600")}>
-                            ₹{unpaid.toLocaleString("en-IN")}
+                        <p className={cn("text-xl font-bold mt-1", pending > 0 ? "text-red-600" : "text-emerald-600")}>
+                            ₹{pending.toLocaleString("en-IN")}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{unpaid > 0 ? "pending payment" : "all clear"}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{pending > 0 ? "pending payment" : "all clear"}</p>
                     </div>
                 </div>
             )}
@@ -203,22 +228,58 @@ function InvoicesTab({ patientId }: { patientId: string }) {
             ) : (
                 <div className="space-y-2">
                     {invoices.map(inv => (
-                        <div key={inv.id} className="flex items-center gap-3 bg-white rounded-xl border border-border/50 p-4 hover:border-border transition-colors">
-                            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-                                <Receipt className="w-4 h-4 text-amber-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2">
-                                    <p className="text-sm font-bold">₹{Number(inv.amount).toLocaleString("en-IN")}</p>
-                                    <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 font-medium", STATUS_STYLES[inv.status] ?? "")}>
-                                        {inv.status}
-                                    </Badge>
+                        <div key={inv.id} className="bg-white rounded-xl border border-border/50 p-4 hover:border-border transition-colors">
+                            {editId === inv.id ? (
+                                <div className="space-y-2.5">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm font-bold">₹{Number(inv.amount).toLocaleString("en-IN")}</p>
+                                        <button onClick={() => setEditId(null)} className="text-muted-foreground hover:text-foreground transition-colors"><X className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                    <Select value={editStatus} onValueChange={v => setEditStatus(v as typeof editStatus)}>
+                                        <SelectTrigger className="h-8 rounded-xl text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="rounded-xl">
+                                            <SelectItem value="pending" className="rounded-lg text-xs">Pending</SelectItem>
+                                            <SelectItem value="paid" className="rounded-lg text-xs">Paid</SelectItem>
+                                            <SelectItem value="waived" className="rounded-lg text-xs">Waived</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <input value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Notes (optional)"
+                                        className="w-full h-8 rounded-xl border border-border bg-muted/30 px-3 text-xs focus:outline-none" />
+                                    <div className="flex gap-2">
+                                        <button onClick={saveEdit} disabled={saving}
+                                            className="flex-1 h-7 rounded-lg bg-foreground text-white text-xs disabled:opacity-50 font-medium">
+                                            {saving ? "Saving…" : "Save"}
+                                        </button>
+                                        <button onClick={() => setEditId(null)}
+                                            className="flex-1 h-7 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground">
+                                            Cancel
+                                        </button>
+                                    </div>
                                 </div>
-                                {inv.notes && <p className="text-xs text-muted-foreground mt-0.5 truncate">{inv.notes}</p>}
-                                <p className="text-[11px] text-muted-foreground mt-1 font-mono">
-                                    {new Date(inv.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                                </p>
-                            </div>
+                            ) : (
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                                        <Receipt className="w-4 h-4 text-amber-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-sm font-bold">₹{Number(inv.amount).toLocaleString("en-IN")}</p>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 font-medium capitalize", STATUS_STYLES[inv.status] ?? "")}>
+                                                    {inv.status}
+                                                </Badge>
+                                                <button onClick={() => startEdit(inv)} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-medium">
+                                                    Edit
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {inv.notes && <p className="text-xs text-muted-foreground mt-0.5 truncate">{inv.notes}</p>}
+                                        <p className="text-[11px] text-muted-foreground mt-1 font-mono">
+                                            {new Date(inv.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -326,6 +387,7 @@ export default function PatientDetailPage() {
     const [labelDefs, setLabelDefs] = useState<PatientLabel[]>([]);
     const [patientLabels, setPatientLabels] = useState<PatientLabel[]>([]);
     const [assigningLabel, setAssigningLabel] = useState(false);
+    const [labelSelectKey, setLabelSelectKey] = useState(0);
 
     const loadPatient = useCallback(async () => {
         setLoading(true); setError(null);
@@ -352,6 +414,7 @@ export default function PatientDetailPage() {
 
     async function assignLabel(labelId: string) {
         setAssigningLabel(true);
+        setLabelSelectKey(k => k + 1);
         try {
             await patientLabelsApi.assign(patientId, labelId);
             await loadLabels();
@@ -472,8 +535,8 @@ export default function PatientDetailPage() {
                             ))}
                         </div>
                         {unassignedLabels.length > 0 && (
-                            <Select onValueChange={v => { if (v) assignLabel(v); }} disabled={assigningLabel}>
-                                <SelectTrigger className="w-full h-8 rounded-xl text-xs text-muted-foreground">
+                            <Select key={labelSelectKey} onValueChange={v => { if (v) assignLabel(v); }} disabled={assigningLabel}>
+                                <SelectTrigger className="w-full h-8 rounded-xl text-xs text-muted-foreground border-dashed">
                                     <SelectValue placeholder={assigningLabel ? "Assigning…" : "+ Add label…"} />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl">

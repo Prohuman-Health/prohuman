@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
     ClipboardList, FileText, Settings,
     ShieldCheck, LogOut, X,
-    Dumbbell, MessageCircle, BrainCircuit, ChevronDown, ChevronRight, BookOpen,
+    Dumbbell, MessageCircle, BrainCircuit, ChevronDown, ChevronRight, BookOpen, Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -21,6 +21,7 @@ const menuItems = [
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/session-types", label: "Session Types", icon: ClipboardList },
     { href: "/forms", label: "Form Builder", icon: FileText },
+    { href: "/invoices", label: "Invoices", icon: Receipt },
 ];
 
 const directoryItems = [

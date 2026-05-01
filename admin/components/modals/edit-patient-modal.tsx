@@ -186,7 +186,7 @@ export function EditPatientModal({ patient, onClose }: Props) {
                                 </div>
                             </Field>
                             <Field label="Gender">
-                                <Select value={form.gender} onValueChange={v => setForm(f => ({...f, gender: v}))}>
+                                <Select value={form.gender} onValueChange={v => setForm(f => ({...f, gender: v as typeof form.gender}))}>
                                     <SelectTrigger className="w-full h-10 rounded-xl text-sm">
                                         <SelectValue />
                                     </SelectTrigger>
