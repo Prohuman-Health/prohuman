@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Loader2, CalendarDays, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import { useStaff } from "@/lib/contexts/staff-context";
@@ -97,6 +98,11 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
             setForm(prev => ({ ...prev, [k]: e.target.value }));
             setErrors(prev => { const n = { ...prev }; delete n[k]; return n; });
         };
+
+    const setVal = (k: keyof typeof form) => (v: string) => {
+        setForm(prev => ({ ...prev, [k]: v }));
+        setErrors(prev => { const n = { ...prev }; delete n[k]; return n; });
+    };
 
     function validate(): boolean {
         const errs: Record<string, string> = {};
@@ -200,50 +206,61 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                         No branches found. Please create a branch first.
                                     </div>
                                 ) : (
-                                    <select value={form.branch_id} onChange={set("branch_id")}
-                                        className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                            errors.branch_id && "border-red-400")}>
-                                        <option value="">Select branch…</option>
-                                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                    </select>
+                                    <Select value={form.branch_id} onValueChange={setVal("branch_id")}>
+                                        <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.branch_id && "border-red-400")}>
+                                            <SelectValue placeholder="Select branch…" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl">
+                                            {branches.map(b => <SelectItem key={b.id} value={b.id} className="rounded-lg">{b.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
                                 )}
                             </Field>
                         )}
 
                         <Field label="Patient" required error={errors.patient_id}>
-                            <select value={form.patient_id} onChange={set("patient_id")}
-                                className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                    errors.patient_id && "border-red-400")}>
-                                <option value="">Select patient…</option>
-                                {patients.map(p => <option key={p.id} value={p.id}>{p.full_name} ({p.patient_code})</option>)}
-                            </select>
+                            <Select value={form.patient_id} onValueChange={setVal("patient_id")}>
+                                <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.patient_id && "border-red-400")}>
+                                    <SelectValue placeholder="Select patient…" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl">
+                                    {patients.map(p => <SelectItem key={p.id} value={p.id} className="rounded-lg">{p.full_name} ({p.patient_code})</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </Field>
 
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Doctor" required error={errors.doctor_id}>
-                                <select value={form.doctor_id} onChange={set("doctor_id")}
-                                    className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                        errors.doctor_id && "border-red-400")}>
-                                    <option value="">Select doctor…</option>
-                                    {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</option>)}
-                                </select>
+                                <Select value={form.doctor_id} onValueChange={setVal("doctor_id")}>
+                                    <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.doctor_id && "border-red-400")}>
+                                        <SelectValue placeholder="Select doctor…" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {doctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </Field>
                             <Field label="Assisting Doctor">
-                                <select value={form.assisting_doctor_id} onChange={set("assisting_doctor_id")}
-                                    className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
-                                    <option value="">None</option>
-                                    {doctors.filter(d => d.id !== form.doctor_id).map(d => <option key={d.id} value={d.id}>{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</option>)}
-                                </select>
+                                <Select value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")}>
+                                    <SelectTrigger className="w-full h-10 rounded-xl text-sm">
+                                        <SelectValue placeholder="None" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {doctors.filter(d => d.id !== form.doctor_id).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </Field>
                         </div>
 
                         <Field label="Session Type" required error={errors.session_type_id}>
-                            <select value={form.session_type_id} onChange={set("session_type_id")}
-                                className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                    errors.session_type_id && "border-red-400")}>
-                                <option value="">Select type…</option>
-                                {sessionTypes.map(t => <option key={t.id} value={t.id}>{t.name} ({t.default_duration_minutes} min · ₹{t.fee})</option>)}
-                            </select>
+                            <Select value={form.session_type_id} onValueChange={setVal("session_type_id")}>
+                                <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.session_type_id && "border-red-400")}>
+                                    <SelectValue placeholder="Select type…" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl">
+                                    {sessionTypes.map(t => <SelectItem key={t.id} value={t.id} className="rounded-lg">{t.name} ({t.default_duration_minutes} min · ₹{t.fee})</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </Field>
 
                         <div className="grid grid-cols-2 gap-3">

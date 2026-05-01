@@ -5,6 +5,7 @@ import { X, Loader2, ShieldCheck, Stethoscope, Eye, EyeOff, AlertCircle, CheckCi
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput, validatePhone } from "@/components/ui/phone-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useStaff } from "@/lib/contexts/staff-context";
 import { staffApi, doctorsApi } from "@/lib/api";
@@ -170,11 +171,14 @@ export function NewStaffModal({ open, onClose, doctorMode = false }: Props) {
 
                         {!doctorMode && (
                             <Field label="Role" required error={errors.role}>
-                                <select value={form.role} onChange={set("role")}
-                                    className={cn("w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none",
-                                        errors.role && "border-red-400")}>
-                                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                                </select>
+                                <Select value={form.role} onValueChange={v => { setForm(prev => ({...prev, role: v})); setErrors(prev => { const n = {...prev}; delete n.role; return n; }); }}>
+                                    <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.role && "border-red-400")}>
+                                        <SelectValue placeholder="Select role…" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {ROLES.map(r => <SelectItem key={r.value} value={r.value} className="rounded-lg">{r.label}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </Field>
                         )}
 

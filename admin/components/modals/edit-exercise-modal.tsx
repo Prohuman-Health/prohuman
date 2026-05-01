@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Loader2, Dumbbell, Tag, Link, AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { exercisesApi } from "@/lib/api";
 import type { Exercise } from "@/lib/api";
@@ -156,11 +157,14 @@ export function EditExerciseModal({ open, onClose, exercise }: Props) {
                                     value={form.name} onChange={set("name")} />
                             </Field>
                             <Field label="Category">
-                                <select value={form.category} onChange={set("category")}
-                                    className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                                    <option value="">— Select —</option>
-                                    {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                <Select value={form.category} onValueChange={v => setForm(prev => ({...prev, category: v}))}>
+                                    <SelectTrigger className="w-full h-10 rounded-xl text-sm">
+                                        <SelectValue placeholder="— Select —" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {CATEGORY_OPTIONS.map(c => <SelectItem key={c} value={c} className="rounded-lg">{c}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </Field>
                         </div>
 

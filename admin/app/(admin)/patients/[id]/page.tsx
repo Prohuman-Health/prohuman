@@ -5,8 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
     ArrowLeft, Phone, Mail, Calendar, Hash, User, Tag,
     CalendarDays, Receipt, Activity, Stethoscope, AlertCircle,
-    Pencil, Plus, X, Loader2, CheckCircle2, Clock, FileText,
-    RefreshCw,
+    Pencil, Plus, X, Clock, FileText, Trash2, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,17 +51,8 @@ const STATUS_STYLES: Record<string, string> = {
     waived: "border-muted-foreground/30 text-muted-foreground bg-muted/30",
 };
 
-// ── Avatar ─────────────────────────────────────────────────────────────────────
-
-function PatientAvatar({ name, size = "lg" }: { name: string; size?: "sm" | "lg" }) {
+function PatientAvatar({ name }: { name: string }) {
     const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-    if (size === "sm") {
-        return (
-            <div className="w-9 h-9 rounded-xl bg-[#2493A2]/10 text-[#2493A2] flex items-center justify-center text-sm font-bold shrink-0">
-                {initials}
-            </div>
-        );
-    }
     return (
         <div className="w-20 h-20 rounded-2xl bg-[#2493A2]/10 text-[#2493A2] flex items-center justify-center text-3xl font-bold shrink-0">
             {initials}
@@ -303,6 +293,45 @@ function TimelineTab({ patientId }: { patientId: string }) {
     );
 }
 
+// ── Delete confirm modal ───────────────────────────────────────────────────────
+
+function DeleteModal({ patientName, onConfirm, onClose, deleting, error }: {
+    patientName: string; onConfirm: () => void; onClose: () => void;
+    deleting: boolean; error: string | null;
+}) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5 text-red-500" />
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-base">Delete Patient</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">This action cannot be undone</p>
+                    </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    Are you sure you want to permanently delete <span className="font-semibold text-foreground">{patientName}</span>?
+                    All their sessions and invoices will also be removed.
+                </p>
+                {error && (
+                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
+                        <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                    </div>
+                )}
+                <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 rounded-xl" onClick={onClose} disabled={deleting}>Cancel</Button>
+                    <Button variant="destructive" className="flex-1 rounded-xl gap-2" onClick={onConfirm} disabled={deleting}>
+                        {deleting ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</> : <><Trash2 className="w-4 h-4" />Delete</>}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -323,6 +352,9 @@ export default function PatientDetailPage() {
     const [tab, setTab] = useState<TabKey>("sessions");
     const [editOpen, setEditOpen] = useState(false);
     const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
     const [labelDefs, setLabelDefs] = useState<PatientLabel[]>([]);
     const [patientLabels, setPatientLabels] = useState<PatientLabel[]>([]);
     const [assigningLabel, setAssigningLabel] = useState(false);
@@ -365,7 +397,16 @@ export default function PatientDetailPage() {
         } catch { /* ignore */ }
     }
 
-    // ── Loading skeleton ───────────────────────────────────────────────────────
+    async function handleDelete() {
+        setDeleting(true); setDeleteError(null);
+        try {
+            await patientsApi.deactivate(patientId);
+            router.push("/patients");
+        } catch (e: unknown) {
+            setDeleteError(e instanceof Error ? e.message : "Failed to delete patient");
+        } finally { setDeleting(false); }
+    }
+
     if (loading) return (
         <div className="p-6 max-w-5xl mx-auto space-y-5">
             <Skeleton className="h-8 w-40" />
@@ -431,17 +472,28 @@ export default function PatientDetailPage() {
                             <InfoRow icon={Mail} label="Email" value={patient.email ?? "Not provided"} />
                             <InfoRow icon={Hash} label="Patient Code" value={patient.patient_code} />
                             <InfoRow icon={Calendar} label="Registered" value={registeredDate} />
+                            {patient.date_of_birth && (
+                                <InfoRow icon={User} label="Date of Birth" value={new Date(patient.date_of_birth).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })} />
+                            )}
+                            {patient.reference && (
+                                <InfoRow icon={Tag} label="Reference" value={patient.reference} />
+                            )}
                         </div>
 
                         {/* Actions */}
-                        <div className="flex gap-2 pt-1">
-                            <Button size="sm" className="flex-1 rounded-xl gap-1.5 text-xs" onClick={() => setScheduleOpen(true)}>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                            <Button size="sm" className="rounded-xl gap-1.5 text-xs" onClick={() => setScheduleOpen(true)}>
                                 <Plus className="w-3 h-3" /> Schedule
                             </Button>
-                            <Button variant="outline" size="sm" className="flex-1 rounded-xl gap-1.5 text-xs" onClick={() => setEditOpen(true)}>
+                            <Button variant="outline" size="sm" className="rounded-xl gap-1.5 text-xs" onClick={() => setEditOpen(true)}>
                                 <Pencil className="w-3 h-3" /> Edit
                             </Button>
                         </div>
+                        <Button variant="outline" size="sm"
+                            className="w-full rounded-xl gap-1.5 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                            onClick={() => { setDeleteOpen(true); setDeleteError(null); }}>
+                            <Trash2 className="w-3 h-3" /> Delete Patient
+                        </Button>
                     </div>
 
                     {/* Complaints */}
@@ -486,7 +538,6 @@ export default function PatientDetailPage() {
 
                 {/* ── RIGHT: Tabs ────────────────────────────────────────── */}
                 <div className="bg-white rounded-2xl border border-border/50 flex flex-col overflow-hidden min-h-[500px]">
-                    {/* Tab bar */}
                     <div className="flex items-center gap-1 px-5 py-3 border-b border-border/60 bg-muted/20 shrink-0">
                         {TABS.map(({ key, label, icon: Icon }) => (
                             <button key={key} onClick={() => setTab(key)}
@@ -498,12 +549,8 @@ export default function PatientDetailPage() {
                             </button>
                         ))}
                     </div>
-
-                    {/* Tab content */}
                     <div className="flex-1 p-5 overflow-y-auto">
-                        {tab === "sessions" && (
-                            <SessionsTab patientId={patient.id} onSchedule={() => setScheduleOpen(true)} />
-                        )}
+                        {tab === "sessions" && <SessionsTab patientId={patient.id} onSchedule={() => setScheduleOpen(true)} />}
                         {tab === "invoices" && <InvoicesTab patientId={patient.id} />}
                         {tab === "timeline" && <TimelineTab patientId={patient.id} />}
                     </div>
@@ -523,6 +570,15 @@ export default function PatientDetailPage() {
                 onClose={() => setScheduleOpen(false)}
                 prefill={{ patientId: patient.id }}
             />
+            {deleteOpen && (
+                <DeleteModal
+                    patientName={patient.full_name}
+                    onConfirm={handleDelete}
+                    onClose={() => setDeleteOpen(false)}
+                    deleting={deleting}
+                    error={deleteError}
+                />
+            )}
         </div>
     );
 }

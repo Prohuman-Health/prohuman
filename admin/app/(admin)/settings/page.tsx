@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, CalendarDays, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle, QrCode, Smartphone, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel, whatsappApi, WhatsAppAuthStatus, ApiError } from "@/lib/api";
 
@@ -409,16 +410,24 @@ export default function SettingsPage() {
                             {activeTab === "locale" && (
                                 <Section title="Timezone & Locale" desc="Set regional preferences for date formats and timezone.">
                                     <Row label="Timezone" icon={Globe}>
-                                        <select value={get("timezone", "Asia/Kolkata")} onChange={set("timezone")}
-                                            className="w-full max-w-xs h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
-                                            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                                        </select>
+                                        <Select value={get("timezone", "Asia/Kolkata")} onValueChange={v => set("timezone")({ target: { value: v } } as React.ChangeEvent<HTMLSelectElement>)}>
+                                            <SelectTrigger className="w-full max-w-xs h-10 rounded-xl text-sm">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-xl max-h-64">
+                                                {TIMEZONES.map(tz => <SelectItem key={tz} value={tz} className="rounded-lg">{tz}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
                                     </Row>
                                     <Row label="Date Format" icon={Globe}>
-                                        <select value={get("date_format", "DD/MM/YYYY")} onChange={set("date_format")}
-                                            className="w-full max-w-xs h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
-                                            {DATE_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
-                                        </select>
+                                        <Select value={get("date_format", "DD/MM/YYYY")} onValueChange={v => set("date_format")({ target: { value: v } } as React.ChangeEvent<HTMLSelectElement>)}>
+                                            <SelectTrigger className="w-full max-w-xs h-10 rounded-xl text-sm">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-xl">
+                                                {DATE_FORMATS.map(f => <SelectItem key={f} value={f} className="rounded-lg">{f}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
                                     </Row>
                                     <Row label="Currency Symbol" icon={IndianRupee}>
                                         <Input className="rounded-xl w-24" value={get("currency_symbol", "₹")} onChange={set("currency_symbol")} maxLength={3} />

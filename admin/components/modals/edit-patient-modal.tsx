@@ -5,6 +5,7 @@ import { X, Loader2, User, Mail, Hash, AlertCircle, CheckCircle2, Save } from "l
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput, validatePhone } from "@/components/ui/phone-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import { patientsApi, Patient } from "@/lib/api";
@@ -185,10 +186,14 @@ export function EditPatientModal({ patient, onClose }: Props) {
                                 </div>
                             </Field>
                             <Field label="Gender">
-                                <select value={form.gender} onChange={set("gender")}
-                                    className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                                    {GENDERS.map(g => <option key={g}>{g}</option>)}
-                                </select>
+                                <Select value={form.gender} onValueChange={v => setForm(f => ({...f, gender: v}))}>
+                                    <SelectTrigger className="w-full h-10 rounded-xl text-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {GENDERS.map(g => <SelectItem key={g} value={g} className="rounded-lg">{g}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </Field>
                         </div>
 

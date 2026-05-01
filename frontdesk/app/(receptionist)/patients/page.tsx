@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, ChevronRight, RefreshCw, X, User, Phone, Mail, Calendar, Hash, Tag } from "lucide-react";
+import { Search, Plus, ChevronRight, RefreshCw, X, User, Phone, Mail, Calendar, Hash, Tag, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import type { Patient } from "@/lib/api";
 import { patientLabelsApi, PatientLabel } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NewPatientModal } from "@/components/modals/new-patient-modal";
 import { PatientHistoryModal } from "@/components/modals/patient-history-modal";
 import { EditPatientModal } from "@/components/modals/edit-patient-modal";
@@ -157,7 +158,7 @@ export default function PatientsPage() {
                                         {search ? "No patients match your search" : "No patients registered yet"}
                                     </td></tr>
                                 ) : filtered.map((p, i) => (
-                                    <tr key={p.id} onClick={() => router.push(`/patients/${p.id}`)}
+                                    <tr key={p.id} onClick={() => setSelected(selected?.id === p.id ? null : p)}
                                         className={cn("border-b border-border/60 cursor-pointer transition-colors hover:bg-muted/30", selected?.id === p.id && "bg-muted/50")}>
                                         <td className="px-5 py-3.5">
                                             <div className="flex items-center gap-3">
@@ -274,19 +275,22 @@ export default function PatientsPage() {
                                 ))}
                             </div>
                             {labelDefs.filter(l => !selectedPatientLabels.some(sl => sl.id === l.id)).length > 0 && (
-                                <select onChange={e => { if (e.target.value) assignLabel(e.target.value); e.target.value = ""; }}
-                                    disabled={assigningLabel}
-                                    className="w-full h-8 px-2 rounded-xl border border-input bg-background text-xs focus:outline-none appearance-none text-muted-foreground">
-                                    <option value="">+ Add label…</option>
-                                    {labelDefs.filter(l => !selectedPatientLabels.some(sl => sl.id === l.id)).map(l => (
-                                        <option key={l.id} value={l.id}>{l.name}</option>
-                                    ))}
-                                </select>
+                                <Select onValueChange={v => { if (v) assignLabel(v); }} disabled={assigningLabel}>
+                                    <SelectTrigger className="w-full h-8 rounded-xl text-xs text-muted-foreground">
+                                        <SelectValue placeholder={assigningLabel ? "Assigning…" : "+ Add label…"} />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {labelDefs.filter(l => !selectedPatientLabels.some(sl => sl.id === l.id)).map(l => (
+                                            <SelectItem key={l.id} value={l.id} className="rounded-lg text-xs">{l.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             )}
                         </div>
 
                         <div className="space-y-2">
-                            <Button size="sm" className="w-full rounded-xl text-xs" onClick={() => setHistoryPatient(selected)}>View Full History</Button>
+                            <Button size="sm" className="w-full rounded-xl text-xs gap-1.5" onClick={() => router.push(`/patients/${selected.id}`)}>View Details <ExternalLink className="w-3 h-3" /></Button>
+                            <Button variant="outline" size="sm" className="w-full rounded-xl text-xs" onClick={() => setHistoryPatient(selected)}>View Full History</Button>
                             <Button variant="outline" size="sm" className="w-full rounded-xl text-xs" onClick={() => setEditPatient(selected)}>Edit Patient</Button>
                         </div>
                     </div>

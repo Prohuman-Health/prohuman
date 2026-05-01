@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Clock, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Pencil, Trash2, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Search, Clock, X, ChevronLeft, ChevronRight, CalendarDays, User, RefreshCw, Pencil, Trash2, Check, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,7 @@ function SlotForm({ data, onChange, onSave, onCancel, saving }: {
 }
 
 export default function DoctorsPage() {
+    const router = useRouter();
     const { doctors, loading, refresh } = useStaff();
     const { sessions } = useSessions();
 
@@ -280,7 +282,10 @@ export default function DoctorsPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Button size="sm" className="w-full rounded-xl text-xs" onClick={() => setViewMode("calendar")}>
+                            <Button size="sm" className="w-full rounded-xl text-xs gap-1.5" onClick={() => router.push(`/doctors/${selected.id}`)}>
+                                <ExternalLink className="w-3.5 h-3.5" /> View Details
+                            </Button>
+                            <Button size="sm" variant="outline" className="w-full rounded-xl text-xs" onClick={() => setViewMode("calendar")}>
                                 View Calendar
                             </Button>
                             <Button size="sm" variant="outline" className="w-full rounded-xl text-xs"

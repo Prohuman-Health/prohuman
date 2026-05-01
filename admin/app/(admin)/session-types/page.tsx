@@ -5,6 +5,7 @@ import { Plus, Search, Pencil, Trash2, X, Loader2, Clock, IndianRupee, AlertCirc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { sessionTypesApi, SessionType, formsApi, Form } from "@/lib/api";
 
@@ -104,16 +105,14 @@ function SessionTypeModal({ open, initial, onClose, onSaved }: {
 
                         {/* Linked Form picker */}
                         <Field label="Linked Form">
-                            <div className="relative">
-                                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                                <select value={form.form_id} onChange={set("form_id")}
-                                    className="w-full h-10 pl-9 pr-3 rounded-xl border border-input bg-background text-sm focus:outline-none appearance-none">
-                                    <option value="">No form (optional)</option>
-                                    {forms.map(f => (
-                                        <option key={f.id} value={f.id}>{f.title}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            <Select value={form.form_id} onValueChange={v => setForm(p => ({...p, form_id: v}))}>
+                                <SelectTrigger className="w-full h-10 rounded-xl text-sm">
+                                    <SelectValue placeholder="No form (optional)" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl">
+                                    {forms.map(f => <SelectItem key={f.id} value={f.id} className="rounded-lg">{f.title}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                             <p className="text-[11px] text-muted-foreground mt-1">
                                 Patients will fill this form after each session of this type. Only published forms appear.
                             </p>
