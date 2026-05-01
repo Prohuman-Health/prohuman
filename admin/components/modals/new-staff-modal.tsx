@@ -171,7 +171,7 @@ export function NewStaffModal({ open, onClose, doctorMode = false }: Props) {
 
                         {!doctorMode && (
                             <Field label="Role" required error={errors.role}>
-                                <Select value={form.role} onValueChange={v => { setForm(prev => ({...prev, role: v})); setErrors(prev => { const n = {...prev}; delete n.role; return n; }); }}>
+                                <Select value={form.role} onValueChange={v => { setForm(prev => ({...prev, role: v as typeof prev.role})); setErrors(prev => { const n = {...prev}; delete n.role; return n; }); }}>
                                     <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.role && "border-red-400")}>
                                         <SelectValue placeholder="Select role…" />
                                     </SelectTrigger>
