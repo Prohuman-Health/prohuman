@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
     Search, RefreshCw, CalendarDays, X, Loader2, FileText,
     CheckCircle2, XCircle, Clock, User, Stethoscope, AlertCircle,
-    ClipboardList, UserX, ChevronDown, Paperclip, Upload,
+    ClipboardList, UserX, ChevronDown, Paperclip, Upload, ExternalLink,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useCatalog } from "@/lib/contexts/catalog-context";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
+import Link from "next/link";
 import {
     sessionsApi, Session,
     SessionFormData, SessionFormAnswer,
@@ -447,6 +448,12 @@ function SessionDetail({ session, onClose, onFormOpen, onAttended }: {
                     <ClipboardList className="w-3.5 h-3.5" />
                     {session.status === "completed" ? "View Form Responses" : "Fill Session Form"}
                 </Button>
+                <Link href={`/sessions/${session.id}`} className="w-full">
+                    <Button size="sm" variant="outline" className="w-full rounded-xl gap-2">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        View Full Details
+                    </Button>
+                </Link>
             </div>
         </div>
     );
@@ -540,6 +547,7 @@ export default function SessionsPage() {
                                 <CheckCircle2 className="w-3.5 h-3.5" /> Done
                             </button>
                         )}
+
                     </div>
                 </td>
             </tr>
