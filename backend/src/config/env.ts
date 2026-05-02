@@ -18,16 +18,6 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function parsePhoneAllowlist(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((raw) => raw.replace(/[\s\-()]/g, ""))
-    .map((normalized) => (normalized.startsWith("+") ? normalized : `+${normalized}`));
-}
-
 function parseTrustProxy(value: string | undefined, fallback: number | false): number | false {
   if (value === undefined || value.trim() === "") return fallback;
   const trimmed = value.trim().toLowerCase();
@@ -54,7 +44,6 @@ export const env = {
   FRONTEND_URL: requireEnv("FRONTEND_URL", "http://localhost:3001"),
   TRUST_PROXY: parseTrustProxy(process.env.TRUST_PROXY, process.env.NODE_ENV === "production" ? 1 : false),
   WHATSAPP_ENABLE_REMINDER_SEND: parseBool(process.env.WHATSAPP_ENABLE_REMINDER_SEND, false),
-  WHATSAPP_ALLOWED_REMINDER_NUMBERS: parsePhoneAllowlist(process.env.WHATSAPP_ALLOWED_REMINDER_NUMBERS),
   WHATSAPP_MAX_REMINDER_RECIPIENTS: parsePositiveInt(process.env.WHATSAPP_MAX_REMINDER_RECIPIENTS, 5),
   WHATSAPP_REMINDER_COOLDOWN_MINUTES: parsePositiveInt(process.env.WHATSAPP_REMINDER_COOLDOWN_MINUTES, 720),
 } as const;

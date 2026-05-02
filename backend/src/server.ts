@@ -1,6 +1,7 @@
 import app from "./app";
 import { pool } from "./config/db";
 import { env } from "./config/env";
+import { whatsappAuth } from "./utils/whatsappAuth";
 import net from "net";
 
 async function start() {
@@ -14,6 +15,11 @@ async function start() {
     console.error("❌ Database connection failed:", err);
     process.exit(1);
   }
+
+  // Auto-reconnect WhatsApp if saved credentials exist
+  whatsappAuth.connect().catch((err) =>
+    console.warn("⚠️  WhatsApp auto-connect failed (will reconnect when QR is requested):", err instanceof Error ? err.message : err)
+  );
 
   const bindPort = (retries = 3, delay = 1500): Promise<ReturnType<typeof app.listen>> =>
     new Promise((resolve, reject) => {

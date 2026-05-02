@@ -211,6 +211,11 @@ class WhatsAppAuthManager {
     };
   }
 
+  /** Called on server startup — reconnects silently if saved credentials exist. */
+  async connect(): Promise<void> {
+    await this.initSocket();
+  }
+
   async generateQr(): Promise<WhatsAppAuthStatus> {
     await this.initSocket();
 

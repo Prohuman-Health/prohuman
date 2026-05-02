@@ -20,7 +20,6 @@ type ReminderDispatchResult = {
 
 type ReminderSafetyConfig = {
     enableSend: boolean;
-    allowedNumbers: string[];
     maxRecipients: number;
     cooldownMinutes: number;
 };
@@ -57,27 +56,9 @@ function parsePositiveIntValue(value: unknown, fallback: number): number {
     return fallback;
 }
 
-function parsePhoneAllowlistValue(value: unknown, fallback: string[]): string[] {
-    if (Array.isArray(value)) {
-        const normalized = value.map((v) => normalizePhone(String(v))).filter(Boolean);
-        return normalized.length ? [...new Set(normalized)] : fallback;
-    }
-
-    if (typeof value === "string") {
-        const normalized = value
-            .split(",")
-            .map((item) => normalizePhone(item))
-            .filter(Boolean);
-        return normalized.length ? [...new Set(normalized)] : [];
-    }
-
-    return fallback;
-}
-
 async function getReminderSafetyConfig(): Promise<ReminderSafetyConfig> {
     const keys = [
         "WHATSAPP_ENABLE_REMINDER_SEND",
-        "WHATSAPP_ALLOWED_REMINDER_NUMBERS",
         "WHATSAPP_MAX_REMINDER_RECIPIENTS",
         "WHATSAPP_REMINDER_COOLDOWN_MINUTES",
     ];
@@ -94,10 +75,6 @@ async function getReminderSafetyConfig(): Promise<ReminderSafetyConfig> {
         enableSend: parseBoolValue(
             map.get("WHATSAPP_ENABLE_REMINDER_SEND"),
             env.WHATSAPP_ENABLE_REMINDER_SEND
-        ),
-        allowedNumbers: parsePhoneAllowlistValue(
-            map.get("WHATSAPP_ALLOWED_REMINDER_NUMBERS"),
-            env.WHATSAPP_ALLOWED_REMINDER_NUMBERS
         ),
         maxRecipients: parsePositiveIntValue(
             map.get("WHATSAPP_MAX_REMINDER_RECIPIENTS"),
@@ -240,16 +217,6 @@ export const sendProjectReminder = asyncHandler(async (req: Request, res: Respon
     }
 
     const uniqueRecipients = [...new Set(normalizedRecipients)];
-
-    const allowedSet = new Set(cfg.allowedNumbers);
-    if (allowedSet.size === 0) {
-        throw ApiError.badRequest("No allowed reminder recipients configured (settings or env)");
-    }
-
-    const blockedRecipients = uniqueRecipients.filter((r) => !allowedSet.has(r));
-    if (blockedRecipients.length > 0) {
-        throw ApiError.forbidden(`Recipient(s) not in allowlist: ${blockedRecipients.join(", ")}`);
-    }
 
     const now = Date.now();
     const cooldownMs = cfg.cooldownMinutes * 60 * 1000;
