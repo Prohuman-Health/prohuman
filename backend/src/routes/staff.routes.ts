@@ -11,6 +11,7 @@ export const createStaffSchema = z.object({
   role:      z.enum(["admin", "receptionist", "doctor"]),
   phone:     z.string().optional(),
   branch_id: z.string().uuid().optional(),
+  is_active: z.boolean().optional(),
 });
 
 const router = Router();
