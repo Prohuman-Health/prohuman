@@ -3,7 +3,8 @@ import rateLimit from "express-rate-limit";
 import {
     listWhatsappTemplates, getWhatsappTemplate, getTemplateByTrigger,
     updateWhatsappTemplate, previewTemplate, toggleTemplateActive, sendProjectReminder,
-    getWhatsappAuthStatus, generateWhatsappQr, logoutWhatsappAuth
+    getWhatsappAuthStatus, generateWhatsappQr, logoutWhatsappAuth,
+    listNotificationRules, createNotificationRule, updateNotificationRule, deleteNotificationRule,
 } from "../controllers/whatsapp.controller";
 import { authenticate, requireRole } from "../middleware/auth.middleware";
 
@@ -25,6 +26,13 @@ router.post("/auth/logout", requireRole("admin"), logoutWhatsappAuth);
 
 router.get("/", listWhatsappTemplates);
 router.get("/trigger/:trigger", getTemplateByTrigger);
+
+// ── Notification rules (must be before /:id to avoid shadowing) ────────────
+router.get("/rules", requireRole("admin"), listNotificationRules);
+router.post("/rules", requireRole("admin"), createNotificationRule);
+router.patch("/rules/:id", requireRole("admin"), updateNotificationRule);
+router.delete("/rules/:id", requireRole("admin"), deleteNotificationRule);
+
 router.get("/:id", getWhatsappTemplate);
 router.patch("/:id", requireRole("admin"), updateWhatsappTemplate);
 router.post("/:id/preview", requireRole("admin"), previewTemplate);

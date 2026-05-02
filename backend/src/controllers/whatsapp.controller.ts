@@ -273,3 +273,127 @@ export const logoutWhatsappAuth = asyncHandler(async (_req: Request, res: Respon
     await whatsappAuth.logout();
     ApiResponse.ok(res, { logged_out: true }, "WhatsApp session logged out");
 });
+
+// ── Notification Rules ────────────────────────────────────────────────────────
+
+type RecipientEntry =
+    | { type: "patient" }
+    | { type: "doctor" }
+    | { type: "custom"; phone: string; label?: string };
+
+function validateRecipients(recipients: unknown): RecipientEntry[] {
+    if (!Array.isArray(recipients)) throw ApiError.badRequest("recipients must be an array");
+    for (const r of recipients) {
+        if (typeof r !== "object" || r === null) throw ApiError.badRequest("Each recipient must be an object");
+        const type = (r as Record<string, unknown>).type;
+        if (!["patient", "doctor", "custom"].includes(type as string))
+            throw ApiError.badRequest("recipient type must be patient, doctor, or custom");
+        if (type === "custom") {
+            const phone = (r as Record<string, unknown>).phone;
+            if (typeof phone !== "string" || !phone.trim())
+                throw ApiError.badRequest("custom recipient must have a phone field");
+        }
+    }
+    return recipients as RecipientEntry[];
+}
+
+export const listNotificationRules = asyncHandler(async (_req: Request, res: Response) => {
+    const result = await query(
+        `SELECT r.*,
+                t.name   AS template_name,
+                t.trigger AS template_trigger,
+                sc.full_name AS created_by_name,
+                su.full_name AS updated_by_name
+         FROM whatsapp_notification_rules r
+         LEFT JOIN whatsapp_templates t  ON t.id = r.template_id
+         LEFT JOIN staff sc             ON sc.id = r.created_by
+         LEFT JOIN staff su             ON su.id = r.updated_by
+         ORDER BY r.trigger ASC, r.created_at ASC`
+    );
+    ApiResponse.ok(res, result.rows);
+});
+
+export const createNotificationRule = asyncHandler(async (req: Request, res: Response) => {
+    const { name, trigger, template_id, recipients, delay_minutes, conditions } = req.body;
+
+    if (!name?.trim()) throw ApiError.badRequest("name is required");
+    if (!trigger) throw ApiError.badRequest("trigger is required");
+    if (!template_id) throw ApiError.badRequest("template_id is required");
+
+    const validRecipients = validateRecipients(recipients ?? []);
+
+    // Verify template exists and belongs to the same trigger
+    const tmpl = await query("SELECT id, trigger FROM whatsapp_templates WHERE id = $1", [template_id]);
+    if (!tmpl.rows[0]) throw ApiError.notFound("Template not found");
+
+    const result = await query(
+        `INSERT INTO whatsapp_notification_rules
+           (name, trigger, template_id, recipients, delay_minutes, conditions, created_by, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+         RETURNING *`,
+        [
+            name.trim(),
+            trigger,
+            template_id,
+            JSON.stringify(validRecipients),
+            delay_minutes ?? 0,
+            JSON.stringify(conditions ?? {}),
+            req.user!.sub,
+        ]
+    );
+    ApiResponse.created(res, result.rows[0], "Notification rule created");
+});
+
+export const updateNotificationRule = asyncHandler(async (req: Request, res: Response) => {
+    const existing = await query(
+        "SELECT id FROM whatsapp_notification_rules WHERE id = $1",
+        [req.params.id]
+    );
+    if (!existing.rows[0]) throw ApiError.notFound("Notification rule not found");
+
+    const { name, trigger, template_id, recipients, delay_minutes, is_enabled, conditions } = req.body;
+
+    if (template_id) {
+        const tmpl = await query("SELECT id FROM whatsapp_templates WHERE id = $1", [template_id]);
+        if (!tmpl.rows[0]) throw ApiError.notFound("Template not found");
+    }
+
+    const validRecipients = recipients !== undefined ? validateRecipients(recipients) : undefined;
+
+    const result = await query(
+        `UPDATE whatsapp_notification_rules SET
+           name          = COALESCE($1, name),
+           trigger       = COALESCE($2, trigger),
+           template_id   = COALESCE($3, template_id),
+           recipients    = COALESCE($4, recipients),
+           delay_minutes = COALESCE($5, delay_minutes),
+           is_enabled    = COALESCE($6, is_enabled),
+           conditions    = COALESCE($7, conditions),
+           updated_by    = $8,
+           updated_at    = NOW()
+         WHERE id = $9
+         RETURNING *`,
+        [
+            name?.trim() ?? null,
+            trigger ?? null,
+            template_id ?? null,
+            validRecipients !== undefined ? JSON.stringify(validRecipients) : null,
+            delay_minutes ?? null,
+            is_enabled ?? null,
+            conditions !== undefined ? JSON.stringify(conditions) : null,
+            req.user!.sub,
+            req.params.id,
+        ]
+    );
+    ApiResponse.ok(res, result.rows[0]);
+});
+
+export const deleteNotificationRule = asyncHandler(async (req: Request, res: Response) => {
+    const existing = await query(
+        "SELECT id FROM whatsapp_notification_rules WHERE id = $1",
+        [req.params.id]
+    );
+    if (!existing.rows[0]) throw ApiError.notFound("Notification rule not found");
+    await query("DELETE FROM whatsapp_notification_rules WHERE id = $1", [req.params.id]);
+    ApiResponse.ok(res, null, "Notification rule deleted");
+});
