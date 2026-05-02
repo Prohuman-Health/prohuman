@@ -3,6 +3,7 @@ module.exports = {
         {
             name: "prohuman-backend",
             script: "dist/server.js",
+            interpreter: "/home/swdc-kjsse/.nvm/versions/node/v22.19.0/bin/node",
             cwd: "/vm-storage/projects/prohuman/backend",
 
             // Restart policy

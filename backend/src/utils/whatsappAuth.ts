@@ -1,12 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { Boom } from "@hapi/boom";
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  useMultiFileAuthState,
-  WASocket,
-} from "@whiskeysockets/baileys";
+import type { WASocket, DisconnectReason as DisconnectReasonType } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
 
 export type WhatsAppAuthStatus = {
@@ -96,6 +91,10 @@ class WhatsAppAuthManager {
     this.touch();
 
     await this.ensureAuthDir();
+
+    const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } =
+      await import("@whiskeysockets/baileys");
+
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
     const { version } = await fetchLatestBaileysVersion();
 
