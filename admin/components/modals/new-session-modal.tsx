@@ -32,6 +32,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [availableDoctors, setAvailableDoctors] = useState<import("@/lib/api").Doctor[]>([]);
     const [doctorsLoading, setDoctorsLoading] = useState(false);
     const [sessionTypes, setSessionTypes] = useState<SessionType[]>([]);
+    const [modalEl, setModalEl] = useState<HTMLDivElement | null>(null);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -164,7 +165,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const needsBranchPicker = !user?.branch_id;
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div ref={setModalEl} className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={reset} />
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                 <div className="flex items-center justify-between px-6 py-5 border-b border-border/60">
@@ -210,7 +211,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                         <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.branch_id && "border-red-400")}>
                                             <SelectValue placeholder="Select branch…" />
                                         </SelectTrigger>
-                                        <SelectContent className="rounded-xl">
+                                        <SelectContent className="rounded-xl" container={modalEl}>
                                             {branches.map(b => <SelectItem key={b.id} value={b.id} className="rounded-lg">{b.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
@@ -223,7 +224,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                 <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.patient_id && "border-red-400")}>
                                     <SelectValue placeholder="Select patient…" />
                                 </SelectTrigger>
-                                <SelectContent className="rounded-xl">
+                                <SelectContent className="rounded-xl" container={modalEl}>
                                     {patients.map(p => <SelectItem key={p.id} value={p.id} className="rounded-lg">{p.full_name} ({p.patient_code})</SelectItem>)}
                                 </SelectContent>
                             </Select>
@@ -235,7 +236,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                     <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.doctor_id && "border-red-400")}>
                                         <SelectValue placeholder={doctorsLoading ? "Loading…" : !form.date ? "Pick a date first" : "Select doctor…"} />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-xl">
+                                    <SelectContent className="rounded-xl" container={modalEl}>
                                         {availableDoctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
                                         {!doctorsLoading && availableDoctors.length === 0 && (
                                             <div className="px-3 py-2 text-xs text-gray-400 text-center">No available doctors on this date</div>
@@ -248,7 +249,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                     <SelectTrigger className="w-full h-10 rounded-xl text-sm">
                                         <SelectValue placeholder="None" />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-xl">
+                                    <SelectContent className="rounded-xl" container={modalEl}>
                                         {availableDoctors.filter(d => d.id !== form.doctor_id).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -260,7 +261,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                 <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.session_type_id && "border-red-400")}>
                                     <SelectValue placeholder="Select type…" />
                                 </SelectTrigger>
-                                <SelectContent className="rounded-xl">
+                                <SelectContent className="rounded-xl" container={modalEl}>
                                     {sessionTypes.map(t => <SelectItem key={t.id} value={t.id} className="rounded-lg">{t.name} ({t.default_duration_minutes} min · ₹{t.fee})</SelectItem>)}
                                 </SelectContent>
                             </Select>
