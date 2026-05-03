@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
     ArrowLeft, Phone, Mail, Stethoscope, User, Clock,
     CalendarDays, Activity, Plus, Pencil, Trash2, Check,
-    RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Loader2, BriefcaseOff, X,
+    RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Loader2, Briefcase, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -503,7 +503,7 @@ export default function DoctorDetailPage() {
                                     const active = lp.from_date <= today && today <= lp.to_date;
                                     return (
                                         <div key={lp.id} className={cn("flex items-start gap-2 p-2.5 rounded-xl", active ? "bg-amber-50 border border-amber-200" : "bg-muted/40")}>
-                                            <BriefcaseOff className={cn("w-3 h-3 mt-0.5 shrink-0", active ? "text-amber-600" : "text-muted-foreground")} />
+                                            <Briefcase className={cn("w-3 h-3 mt-0.5 shrink-0", active ? "text-amber-600" : "text-muted-foreground")} />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-[11px] font-medium">{from} – {to}</p>
                                                 {lp.reason && <p className="text-[10px] text-muted-foreground truncate">{lp.reason}</p>}
