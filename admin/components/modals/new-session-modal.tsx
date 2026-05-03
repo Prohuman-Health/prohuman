@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import { X, Loader2, CalendarDays, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -159,30 +159,34 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         onClose();
     }
 
-    if (!open) return null;
-
     const needsBranchPicker = !user?.branch_id;
 
-    return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={reset} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-5 border-b border-border/60">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-                            <CalendarDays className="w-4 h-4 text-blue-600" />
+    return (
+        <DialogPrimitive.Root open={open} onOpenChange={v => { if (!v) reset(); }}>
+            <DialogPrimitive.Portal>
+                <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                <DialogPrimitive.Content
+                    aria-describedby={undefined}
+                    className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-2xl overflow-hidden outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+                >
+                    <div className="flex items-center justify-between px-6 py-5 border-b border-border/60">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                                <CalendarDays className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div>
+                                <DialogPrimitive.Title className="font-bold text-base">Schedule Session</DialogPrimitive.Title>
+                                <p className="text-xs text-muted-foreground">Book a new patient session</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="font-bold text-base">Schedule Session</h2>
-                            <p className="text-xs text-muted-foreground">Book a new patient session</p>
-                        </div>
+                        <DialogPrimitive.Close asChild>
+                            <button className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </DialogPrimitive.Close>
                     </div>
-                    <button onClick={reset} className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
 
-                <form onSubmit={submit} noValidate>
+                    <form onSubmit={submit} noValidate>
                     <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
                         {apiError && (
                             <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
@@ -206,7 +210,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                         No branches found. Please create a branch first.
                                     </div>
                                 ) : (
-                                    <Select modal={false} value={form.branch_id} onValueChange={setVal("branch_id")}>
+                                    <Select value={form.branch_id} onValueChange={setVal("branch_id")}>
                                         <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.branch_id && "border-red-400")}>
                                             <SelectValue placeholder="Select branch…" />
                                         </SelectTrigger>
@@ -219,7 +223,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                         )}
 
                         <Field label="Patient" required error={errors.patient_id}>
-                            <Select modal={false} value={form.patient_id} onValueChange={setVal("patient_id")}>
+                            <Select value={form.patient_id} onValueChange={setVal("patient_id")}>
                                 <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.patient_id && "border-red-400")}>
                                     <SelectValue placeholder="Select patient…" />
                                 </SelectTrigger>
@@ -231,7 +235,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
 
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Doctor" required error={errors.doctor_id}>
-                                <Select modal={false} value={form.doctor_id} onValueChange={setVal("doctor_id")} disabled={doctorsLoading || !form.date}>
+                                <Select value={form.doctor_id} onValueChange={setVal("doctor_id")} disabled={doctorsLoading || !form.date}>
                                     <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.doctor_id && "border-red-400")}>
                                         <SelectValue placeholder={doctorsLoading ? "Loading…" : !form.date ? "Pick a date first" : "Select doctor…"} />
                                     </SelectTrigger>
@@ -244,7 +248,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                 </Select>
                             </Field>
                             <Field label="Assisting Doctor">
-                                <Select modal={false} value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")} disabled={doctorsLoading || !form.date}>
+                                <Select value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")} disabled={doctorsLoading || !form.date}>
                                     <SelectTrigger className="w-full h-10 rounded-xl text-sm">
                                         <SelectValue placeholder="None" />
                                     </SelectTrigger>
@@ -256,7 +260,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                         </div>
 
                         <Field label="Session Type" required error={errors.session_type_id}>
-                            <Select modal={false} value={form.session_type_id} onValueChange={setVal("session_type_id")}>
+                            <Select value={form.session_type_id} onValueChange={setVal("session_type_id")}>
                                 <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.session_type_id && "border-red-400")}>
                                     <SelectValue placeholder="Select type…" />
                                 </SelectTrigger>
@@ -300,10 +304,10 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                 success ? <><CheckCircle2 className="w-4 h-4" />Scheduled!</> : "Schedule Session"}
                         </Button>
                     </div>
-                </form>
-            </div>
-        </div>,
-        document.body
+                    </form>
+                </DialogPrimitive.Content>
+            </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
     );
 }
 
