@@ -222,14 +222,9 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                     <SelectValue placeholder="Select doctor…" />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl">
-                                    {doctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}{d.on_leave ? " (on leave)" : ""}</SelectItem>)}
+                                    {doctors.filter(d => !d.on_leave).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                            {doctorLeave && (
-                                <p className="text-[11px] text-amber-600 font-medium mt-1">
-                                    On leave {doctorLeave.from_date} – {doctorLeave.to_date}{doctorLeave.reason ? `: ${doctorLeave.reason}` : ""}
-                                </p>
-                            )}
                             {doctors.length === 0 && (
                                 <p className="text-[11px] text-amber-600 font-medium mt-1">No active doctors found. Please add a doctor in the admin panel.</p>
                             )}

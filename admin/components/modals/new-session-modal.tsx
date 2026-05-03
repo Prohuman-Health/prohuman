@@ -252,14 +252,9 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                         <SelectValue placeholder="Select doctor…" />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl">
-                                        {doctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}{d.on_leave ? " (on leave)" : ""}</SelectItem>)}
+                                        {doctors.filter(d => !d.on_leave).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
-                                {doctorLeave && (
-                                    <p className="text-[11px] text-amber-600 font-medium mt-1">
-                                        On leave {doctorLeave.from_date} – {doctorLeave.to_date}{doctorLeave.reason ? `: ${doctorLeave.reason}` : ""}
-                                    </p>
-                                )}
                             </Field>
                             <Field label="Assisting Doctor">
                                 <Select value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")}>
