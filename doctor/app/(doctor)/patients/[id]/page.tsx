@@ -5,12 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import {
     ArrowLeft, Phone, Mail, Calendar, Hash, User,
     CalendarDays, Activity, Stethoscope, AlertCircle,
-    Clock, FileText, Receipt,
+    Clock, FileText, Receipt, X, ChevronDown, ChevronUp, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { patientsApi, Patient, PatientSession, TimelineItem } from "@/lib/api";
+import { patientsApi, Patient, PatientSession, TimelineItem, sessionsApi, SessionFormData } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -51,12 +51,112 @@ function PatientAvatar({ name }: { name: string }) {
     );
 }
 
+// ── Session Form Modal ────────────────────────────────────────────────────────
+
+function SessionFormModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+    const [form, setForm] = useState<SessionFormData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        sessionsApi.getForm(sessionId)
+            .then(setForm)
+            .catch(() => setError("Could not load form responses."))
+            .finally(() => setLoading(false));
+    }, [sessionId]);
+
+    const hasResponses = form && form.responses.length > 0;
+
+    function getAnswer(q: SessionFormData["questions"][0]) {
+        const r = form?.responses.find(r => r.question_id === q.id);
+        if (!r) return null;
+        if (r.answer_options?.length) return r.answer_options.join(", ");
+        if (r.answer_value !== null && r.answer_value !== undefined) return String(r.answer_value);
+        return r.answer_text ?? null;
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <p className="font-semibold text-sm">Session Form Responses</p>
+                    </div>
+                    <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="overflow-y-auto flex-1 px-5 py-4">
+                    {loading && (
+                        <div className="flex justify-center py-10">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+                    {error && (
+                        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-3 text-sm text-red-700">
+                            <AlertCircle className="w-4 h-4 shrink-0" />{error}
+                        </div>
+                    )}
+                    {!loading && !error && !hasResponses && (
+                        <div className="flex flex-col items-center gap-3 py-10 text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+                                <FileText className="w-5 h-5 text-muted-foreground" />
+                            </div>
+                            <p className="text-sm text-muted-foreground">No form responses recorded for this session.</p>
+                        </div>
+                    )}
+                    {!loading && !error && hasResponses && (
+                        <div className="space-y-3">
+                            {form!.questions.map((q, idx) => {
+                                const answer = getAnswer(q);
+                                const isLong = (answer?.length ?? 0) > 120;
+                                const isExpanded = expanded[q.id];
+                                return (
+                                    <div key={q.id} className="bg-muted/40 rounded-xl p-3.5">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                            {idx + 1}. {q.text}
+                                        </p>
+                                        {answer !== null ? (
+                                            <div>
+                                                <p className={cn(
+                                                    "text-sm font-medium leading-relaxed",
+                                                    !isExpanded && isLong ? "line-clamp-3" : ""
+                                                )}>{answer}</p>
+                                                {isLong && (
+                                                    <button
+                                                        onClick={() => setExpanded(e => ({ ...e, [q.id]: !e[q.id] }))}
+                                                        className="flex items-center gap-1 text-[11px] text-[#2493A2] mt-1 font-medium">
+                                                        {isExpanded ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show more</>}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground italic">Not answered</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Sessions tab ───────────────────────────────────────────────────────────────
 
 function SessionsTab({ patientId }: { patientId: string }) {
     const [sessions, setSessions] = useState<PatientSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [formSessionId, setFormSessionId] = useState<string | null>(null);
 
     useEffect(() => {
         patientsApi.sessions(patientId)
@@ -97,7 +197,40 @@ function SessionsTab({ patientId }: { patientId: string }) {
                                             <p className="text-sm font-semibold">{s.session_type}</p>
                                             <p className="text-xs text-muted-foreground mt-0.5">Dr. {s.doctor_name}</p>
                                         </div>
-                                        <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 font-medium shrink-0", STATUS_STYLES[s.status] ?? STATUS_STYLES.pending)}>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <button
+                                                onClick={() => setFormSessionId(s.id)}
+                                                title="View form responses"
+                                                className="w-7 h-7 rounded-lg border border-border/60 flex items-center justify-center text-muted-foreground hover:text-[#2493A2] hover:border-[#2493A2]/40 hover:bg-[#2493A2]/5 transition-colors">
+                                                <FileText className="w-3.5 h-3.5" />
+                                            </button>
+                                            <Badge variant="outline" className={cn("text-[10px] rounded-full px-2 font-medium", STATUS_STYLES[s.status] ?? STATUS_STYLES.pending)}>
+                                                {s.status.replace(/-/g, " ")}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />
+                                            {dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                        </span>
+                                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />
+                                            {dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                        </span>
+                                        <span>{s.duration_minutes} min</span>
+                                        <span className="text-muted-foreground/70">· {s.branch}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </>
+            )}
+            {formSessionId && (
+                <SessionFormModal sessionId={formSessionId} onClose={() => setFormSessionId(null)} />
+            )}
+        </div>
+    );
+}
                                             {s.status.replace(/-/g, " ")}
                                         </Badge>
                                     </div>
