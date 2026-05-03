@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-    LayoutDashboard, CalendarDays, LogOut, X, ClipboardList, Users, UserCircle,
+    LayoutDashboard, CalendarDays, LogOut, X, ClipboardList, Users, UserCircle, Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 const menuItems = [
     { href: "/dashboard",  label: "Dashboard",   icon: LayoutDashboard },
     { href: "/schedule",   label: "My Schedule",  icon: CalendarDays },
+    { href: "/calendar",   label: "Calendar",     icon: Calendar },
     { href: "/sessions",   label: "Sessions",     icon: ClipboardList },
     { href: "/patients",   label: "Patients",     icon: Users },
     { href: "/profile",    label: "My Profile",   icon: UserCircle },

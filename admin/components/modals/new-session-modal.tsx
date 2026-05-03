@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
-import { useSessionTypes } from "@/lib/contexts/catalog-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useAuth } from "@/lib/auth-context";
-import { sessionsApi, branchesApi, calendarApi, doctorsApi, Branch } from "@/lib/api";
+import { sessionsApi, calendarApi, Branch, SessionType } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -20,7 +19,6 @@ interface Props {
 
 export function NewSessionModal({ open, onClose, prefill }: Props) {
     const { patients } = usePatients();
-    const { sessionTypes, refresh: refreshSessionTypes } = useSessionTypes();
     const { refresh } = useSessions();
     const { user } = useAuth();
 
@@ -32,6 +30,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [closedReason, setClosedReason] = useState<string | null>(null);
     const [availableDoctors, setAvailableDoctors] = useState<import("@/lib/api").Doctor[]>([]);
     const [doctorsLoading, setDoctorsLoading] = useState(false);
+    const [sessionTypes, setSessionTypes] = useState<SessionType[]>([]);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -49,63 +48,49 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         branch_id: user?.branch_id ?? "",
     });
 
-    // Load branches when modal opens (if no branch on user)
+    // Single effect: fetch all booking-modal data in one round trip
     useEffect(() => {
         if (!open) return;
-        // Reset success/error on open
+        // Reset UI state on open
         setErrors({}); setApiError(null); setSuccess(false);
-        // Force-refresh session types so newly added types appear
-        refreshSessionTypes();
-        // Apply prefill values (including date) on each open
+        // Apply prefill values on each open
         setForm(prev => ({
             ...prev,
             patient_id: prefill?.patientId ?? prev.patient_id,
-            doctor_id: prefill?.doctorId ?? prev.doctor_id,
+            doctor_id: prefill?.doctorId ?? "",
+            assisting_doctor_id: "",
             date: prefill?.date ?? todayStr,
             time: prefill?.time ?? prev.time,
             branch_id: user?.branch_id ?? prev.branch_id,
         }));
-
-        if (!user?.branch_id) {
-            setBranchesLoading(true);
-            branchesApi.list()
-                .then(b => {
-                    setBranches(b);
-                    // Auto-select first branch if only one
-                    if (b.length === 1) setForm(prev => ({ ...prev, branch_id: b[0].id }));
-                })
-                .catch(() => {/* silent */ })
-                .finally(() => setBranchesLoading(false));
-        }
-    }, [open, user?.branch_id, prefill?.date, prefill?.patientId, prefill?.doctorId, refreshSessionTypes]);
-
-    // Check if selected doctor is on leave on the selected date
-    useEffect(() => {
-        if (!form.date) { setAvailableDoctors([]); return; }
-        setDoctorsLoading(true);
-        const params: Record<string, string> = {};
-        if (form.branch_id) params.branch_id = form.branch_id;
-        doctorsApi.listAvailable(form.date, params)
-            .then(setAvailableDoctors)
-            .catch(() => setAvailableDoctors([]))
-            .finally(() => setDoctorsLoading(false));
-        // If the previously selected doctor is no longer available, clear the selection
-        setForm(prev => ({ ...prev, doctor_id: "", assisting_doctor_id: "" }));
-    }, [form.date, form.branch_id]);
+    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!open || !form.date) return;
-        calendarApi.listClosures({ from: form.date, to: form.date })
-            .then(rows => {
-                const c = rows[0];
-                setIsClosedDay(!!c);
-                setClosedReason(c?.reason ?? null);
+        setDoctorsLoading(true);
+        setBranchesLoading(true);
+        calendarApi.dateInfo(form.date, form.branch_id || undefined)
+            .then(info => {
+                setAvailableDoctors(info.available_doctors);
+                setIsClosedDay(info.is_closed);
+                setClosedReason(info.closure_reason);
+                setSessionTypes(info.session_types);
+                if (!user?.branch_id) {
+                    setBranches(info.branches);
+                    if (info.branches.length === 1) {
+                        setForm(prev => ({ ...prev, branch_id: info.branches[0].id }));
+                    }
+                }
+                // Clear doctor selections since availability may have changed
+                setForm(prev => ({ ...prev, doctor_id: "", assisting_doctor_id: "" }));
             })
             .catch(() => {
+                setAvailableDoctors([]);
                 setIsClosedDay(false);
                 setClosedReason(null);
-            });
-    }, [open, form.date]);
+            })
+            .finally(() => { setDoctorsLoading(false); setBranchesLoading(false); });
+    }, [open, form.date, form.branch_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {

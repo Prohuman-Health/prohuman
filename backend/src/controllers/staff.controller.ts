@@ -83,12 +83,25 @@ export const updateStaff = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const setStaffPassword = asyncHandler(async (req: Request, res: Response) => {
-  const { password } = req.body;
+  const { password, current_password } = req.body;
   if (!password || typeof password !== "string" || password.length < 8)
     throw ApiError.badRequest("Password must be at least 8 characters");
 
-  const existing = await query("SELECT id FROM staff WHERE id = $1", [req.params.id]);
+  const isAdmin = req.user?.role === "admin";
+  const isSelf  = req.user?.sub === req.params.id;
+
+  // Non-admins can only change their own password
+  if (!isAdmin && !isSelf) throw ApiError.forbidden("Insufficient permissions");
+
+  const existing = await query("SELECT id, password_hash FROM staff WHERE id = $1", [req.params.id]);
   if (!existing.rows[0]) throw ApiError.notFound("Staff not found");
+
+  // Self-service requires current password verification
+  if (isSelf && !isAdmin) {
+    if (!current_password) throw ApiError.badRequest("Current password is required");
+    const valid = await bcrypt.compare(current_password, existing.rows[0].password_hash);
+    if (!valid) throw ApiError.forbidden("Current password is incorrect");
+  }
 
   const hash = await bcrypt.hash(password, 12);
   await query("UPDATE staff SET password_hash = $1, updated_at = NOW() WHERE id = $2", [hash, req.params.id]);

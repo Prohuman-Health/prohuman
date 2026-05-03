@@ -30,6 +30,9 @@ router.get("/sessions",     c.getCalendarSessions);   // ?branch_id=&from=&to=&d
 // Available doctor slots for a given date (real-time availability check)
 router.get("/availability", validate(availabilityQuerySchema, "query"), c.getAvailableSlots);
 
+// Booking modal — single call returns available_doctors + is_closed + session_types + branches
+router.get("/date-info",    c.getBookingDateInfo);
+
 // Clinic closure days (for closed/public holidays)
 router.get("/closures", validate(closureListQuerySchema, "query"), c.listClinicClosures);
 router.post("/closures", authorize("admin"), validate(closureSchema), c.createClinicClosure);

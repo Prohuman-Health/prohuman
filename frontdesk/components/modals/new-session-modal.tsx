@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
-import { useSessionTypes } from "@/lib/contexts/catalog-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useAuth } from "@/lib/auth-context";
-import { sessionsApi, branchesApi, doctorsApi, Branch } from "@/lib/api";
+import { sessionsApi, calendarApi, Branch, SessionType } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -20,7 +19,6 @@ interface Props {
 
 export function NewSessionModal({ open, onClose, prefill }: Props) {
     const { patients } = usePatients();
-    const { sessionTypes } = useSessionTypes();
     const { refresh } = useSessions();
     const { user } = useAuth();
 
@@ -28,8 +26,11 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [success, setSuccess] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
+    const [isClosedDay, setIsClosedDay] = useState(false);
+    const [closedReason, setClosedReason] = useState<string | null>(null);
     const [availableDoctors, setAvailableDoctors] = useState<import("@/lib/api").Doctor[]>([]);
     const [doctorsLoading, setDoctorsLoading] = useState(false);
+    const [sessionTypes, setSessionTypes] = useState<SessionType[]>([]);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -46,47 +47,46 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         branch_id: user?.branch_id ?? "",
     });
 
-    // Load branches when modal opens (if no branch on user)
+    // Single effect: reset on open
     useEffect(() => {
         if (!open) return;
-        // Reset success/error on open
         setErrors({}); setApiError(null); setSuccess(false);
-        // Re-apply prefill (date/time may have changed since last open)
         setForm(prev => ({
             ...prev,
             branch_id: user?.branch_id ?? prev.branch_id,
             date: prefill?.date ?? todayStr,
             time: prefill?.time ?? "09:00",
+            doctor_id: "",
             ...(prefill?.patientId ? { patient_id: prefill.patientId } : {}),
-            ...(prefill?.doctorId  ? { doctor_id:  prefill.doctorId  } : {}),
         }));
+    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-        if (!user?.branch_id) {
-            setBranchesLoading(true);
-            branchesApi.list()
-                .then(b => {
-                    setBranches(b);
-                    // Auto-select first branch if only one
-                    if (b.length === 1) setForm(prev => ({ ...prev, branch_id: b[0].id }));
-                })
-                .catch(() => {/* silent */ })
-                .finally(() => setBranchesLoading(false));
-        }
-    }, [open, user?.branch_id, prefill?.date, prefill?.time, prefill?.patientId, prefill?.doctorId, todayStr]);
-
-    // Fetch available doctors whenever date or branch changes
+    // Single API call: all booking modal data in one round trip
     useEffect(() => {
-        if (!form.date) { setAvailableDoctors([]); return; }
+        if (!open || !form.date) return;
         setDoctorsLoading(true);
-        const params: Record<string, string> = {};
-        if (form.branch_id) params.branch_id = form.branch_id;
-        doctorsApi.listAvailable(form.date, params)
-            .then(setAvailableDoctors)
-            .catch(() => setAvailableDoctors([]))
-            .finally(() => setDoctorsLoading(false));
-        // Clear doctor selection if date/branch changes
-        setForm(prev => ({ ...prev, doctor_id: "" }));
-    }, [form.date, form.branch_id]);
+        setBranchesLoading(true);
+        calendarApi.dateInfo(form.date, form.branch_id || undefined)
+            .then(info => {
+                setAvailableDoctors(info.available_doctors);
+                setIsClosedDay(info.is_closed);
+                setClosedReason(info.closure_reason);
+                setSessionTypes(info.session_types);
+                if (!user?.branch_id) {
+                    setBranches(info.branches);
+                    if (info.branches.length === 1) {
+                        setForm(prev => ({ ...prev, branch_id: info.branches[0].id }));
+                    }
+                }
+                setForm(prev => ({ ...prev, doctor_id: "" }));
+            })
+            .catch(() => {
+                setAvailableDoctors([]);
+                setIsClosedDay(false);
+                setClosedReason(null);
+            })
+            .finally(() => { setDoctorsLoading(false); setBranchesLoading(false); });
+    }, [open, form.date, form.branch_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const set = (k: keyof typeof form) =>
         (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -107,6 +107,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!form.date) errs.date = "Date is required";
         if (!form.time) errs.time = "Time is required";
         if (!form.branch_id) errs.branch_id = "Select a branch";
+        if (isClosedDay) errs.date = "Clinic is closed on selected date";
         setErrors(errs);
         return Object.keys(errs).length === 0;
     }
@@ -246,6 +247,9 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                     <Input type="date" className={cn("pl-9 rounded-xl", errors.date && "border-red-400")}
                                         value={form.date} onChange={set("date")} />
                                 </div>
+                                {isClosedDay && (
+                                    <p className="text-[11px] text-red-600 mt-1">Clinic closed: {closedReason || "No reason provided"}</p>
+                                )}
                             </Field>
                             <Field label="Time" required error={errors.time}>
                                 <div className="relative">

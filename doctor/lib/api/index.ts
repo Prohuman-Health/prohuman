@@ -10,3 +10,5 @@ export type { Patient, PatientSession, TimelineItem, PatientListResponse } from 
 export type { SessionFormData, SessionFormQuestion, SessionFormResponse, SessionFormAnswer } from "./sessions";
 export { leaveApi } from "./leave";
 export type { DoctorLeavePeriod } from "./leave";
+export { calendarApi } from "./calendar";
+export type { ClinicClosure } from "./calendar";

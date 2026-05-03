@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { query } from "../config/db";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/ApiResponse";
+import { ApiError } from "../utils/ApiError";
 
 export const getCalendarSessions = asyncHandler(async (req: Request, res: Response) => {
   const { branch_id, from, to, doctor_id } = req.query as Record<string, string>;
@@ -213,4 +214,80 @@ export const getMySchedule = asyncHandler(async (req: Request, res: Response) =>
     [doctor_id, date]
   );
   ApiResponse.ok(res, result.rows);
+});
+
+/**
+ * GET /calendar/date-info?date=YYYY-MM-DD[&branch_id=]
+ *
+ * Single endpoint for the new-session booking modal.
+ * Returns in one round-trip:
+ *   - available_doctors   — active doctors not on leave on this date
+ *   - is_closed           — whether the clinic is closed on this date
+ *   - closure_reason      — reason if closed
+ *   - session_types       — all active session types
+ *   - branches            — all active branches
+ */
+export const getBookingDateInfo = asyncHandler(async (req: Request, res: Response) => {
+  const { date, branch_id } = req.query as Record<string, string>;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw ApiError.badRequest("date query param is required (YYYY-MM-DD)");
+  }
+
+  // Run all queries in parallel
+  const [doctorsResult, closureResult, typesResult, branchesResult] = await Promise.all([
+    // Available doctors: active, not on leave on this date
+    (() => {
+      const conditions = ["s.is_active = true"];
+      const vals: unknown[] = [date];
+      let i = 2;
+      if (branch_id) { conditions.push(`s.branch_id = $${i++}`); vals.push(branch_id); }
+      return query(
+        `SELECT d.id, d.specialty, d.bio,
+                s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active,
+                FALSE AS on_leave
+         FROM doctors d
+         JOIN staff s ON s.id = d.staff_id
+         WHERE ${conditions.join(" AND ")}
+           AND NOT EXISTS (
+             SELECT 1 FROM doctor_leave_periods lp
+             WHERE lp.doctor_id = d.id
+               AND $1::date BETWEEN lp.from_date AND lp.to_date
+           )
+         ORDER BY s.full_name`,
+        vals
+      );
+    })(),
+
+    // Closure check for this date
+    query(
+      `SELECT id, reason FROM clinic_closures
+       WHERE closure_date = $1::date AND is_active = TRUE LIMIT 1`,
+      [date]
+    ),
+
+    // Active session types
+    query(
+      `SELECT st.*, f.title AS form_title
+       FROM session_types st LEFT JOIN forms f ON f.id = st.form_id
+       WHERE st.is_active = TRUE ORDER BY st.name`,
+      []
+    ),
+
+    // Active branches
+    query(
+      `SELECT id, name, address, phone, email, is_active
+       FROM branches WHERE is_active = TRUE ORDER BY name`,
+      []
+    ),
+  ]);
+
+  const closure = closureResult.rows[0] ?? null;
+
+  ApiResponse.ok(res, {
+    available_doctors: doctorsResult.rows,
+    is_closed: !!closure,
+    closure_reason: closure?.reason ?? null,
+    session_types: typesResult.rows,
+    branches: branchesResult.rows,
+  });
 });
