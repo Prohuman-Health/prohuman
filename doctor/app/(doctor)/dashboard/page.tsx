@@ -197,10 +197,11 @@ export default function DashboardPage() {
     }, [user?.doctor_id]);
 
     // Range for the current view
-    const range = useMemo(() => {
-        if (viewMode === "day")   return { from: selectedDate, to: selectedDate };
-        if (viewMode === "week")  return weekRange(selectedDate);
-        return monthRange(selectedDate);
+    const range = useMemo((): { from: string; to: string } => {
+        if (viewMode === "day")  return { from: selectedDate, to: selectedDate };
+        if (viewMode === "week") { const { start, end } = weekRange(selectedDate); return { from: start, to: end }; }
+        const { start, end } = monthRange(selectedDate);
+        return { from: start, to: end };
     }, [viewMode, selectedDate]);
 
     useEffect(() => {
