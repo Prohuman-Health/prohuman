@@ -45,6 +45,38 @@ export const listDoctors = asyncHandler(async (req: Request, res: Response) => {
   ApiResponse.ok(res, result.rows);
 });
 
+/**
+ * GET /doctors/available?date=YYYY-MM-DD[&branch_id=...]
+ * Returns only doctors who are NOT on leave on the given date.
+ */
+export const listAvailableDoctors = asyncHandler(async (req: Request, res: Response) => {
+  const { date, branch_id } = req.query as Record<string, string>;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw ApiError.badRequest("date query param is required (YYYY-MM-DD)");
+  }
+  const conditions: string[] = ["s.is_active = true"];
+  const vals: unknown[] = [date];
+  let i = 2;
+  if (branch_id) { conditions.push(`s.branch_id = $${i++}`); vals.push(branch_id); }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const sql = `
+    SELECT d.id, d.specialty, d.bio,
+           s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active,
+           FALSE AS on_leave
+    FROM doctors d
+    JOIN staff s ON s.id = d.staff_id
+    ${where}
+      AND NOT EXISTS (
+        SELECT 1 FROM doctor_leave_periods lp
+        WHERE lp.doctor_id = d.id
+          AND $1::date BETWEEN lp.from_date AND lp.to_date
+      )
+    ORDER BY s.full_name
+  `;
+  const result = await query(sql, vals);
+  ApiResponse.ok(res, result.rows);
+});
+
 export const getDoctor = asyncHandler(async (req: Request, res: Response) => {
   const result = await query(
     `SELECT d.id, d.specialty, d.bio,

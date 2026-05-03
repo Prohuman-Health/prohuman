@@ -7,12 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
-import { useStaff } from "@/lib/contexts/staff-context";
 import { useSessionTypes } from "@/lib/contexts/catalog-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useAuth } from "@/lib/auth-context";
 import { sessionsApi, branchesApi, calendarApi, doctorsApi, Branch } from "@/lib/api";
-import type { DoctorLeavePeriod } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -22,7 +20,6 @@ interface Props {
 
 export function NewSessionModal({ open, onClose, prefill }: Props) {
     const { patients } = usePatients();
-    const { doctors } = useStaff();
     const { sessionTypes, refresh: refreshSessionTypes } = useSessionTypes();
     const { refresh } = useSessions();
     const { user } = useAuth();
@@ -33,7 +30,8 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [apiError, setApiError] = useState<string | null>(null);
     const [isClosedDay, setIsClosedDay] = useState(false);
     const [closedReason, setClosedReason] = useState<string | null>(null);
-    const [doctorLeave, setDoctorLeave] = useState<DoctorLeavePeriod | null>(null);
+    const [availableDoctors, setAvailableDoctors] = useState<import("@/lib/api").Doctor[]>([]);
+    const [doctorsLoading, setDoctorsLoading] = useState(false);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -83,16 +81,17 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
 
     // Check if selected doctor is on leave on the selected date
     useEffect(() => {
-        if (!form.doctor_id || !form.date) { setDoctorLeave(null); return; }
-        doctorsApi.listLeave(form.doctor_id)
-            .then(periods => {
-                const active = periods.find(
-                    lp => form.date >= lp.from_date && form.date <= lp.to_date
-                ) ?? null;
-                setDoctorLeave(active);
-            })
-            .catch(() => setDoctorLeave(null));
-    }, [form.doctor_id, form.date]);
+        if (!form.date) { setAvailableDoctors([]); return; }
+        setDoctorsLoading(true);
+        const params: Record<string, string> = {};
+        if (form.branch_id) params.branch_id = form.branch_id;
+        doctorsApi.listAvailable(form.date, params)
+            .then(setAvailableDoctors)
+            .catch(() => setAvailableDoctors([]))
+            .finally(() => setDoctorsLoading(false));
+        // If the previously selected doctor is no longer available, clear the selection
+        setForm(prev => ({ ...prev, doctor_id: "", assisting_doctor_id: "" }));
+    }, [form.date, form.branch_id]);
 
     useEffect(() => {
         if (!open || !form.date) return;
@@ -128,7 +127,6 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!form.time) errs.time = "Time is required";
         if (!form.branch_id) errs.branch_id = "Select a branch";
         if (isClosedDay) errs.date = "Clinic is closed on selected date";
-        if (doctorLeave) errs.doctor_id = `Doctor is on leave until ${doctorLeave.to_date}`;
         if (form.date && form.time) {
             const selectedDateTime = new Date(`${form.date}T${form.time}:00`);
             if (Number.isNaN(selectedDateTime.getTime())) {
@@ -247,22 +245,25 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
 
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Doctor" required error={errors.doctor_id}>
-                                <Select value={form.doctor_id} onValueChange={setVal("doctor_id")}>
+                                <Select value={form.doctor_id} onValueChange={setVal("doctor_id")} disabled={doctorsLoading || !form.date}>
                                     <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.doctor_id && "border-red-400")}>
-                                        <SelectValue placeholder="Select doctor…" />
+                                        <SelectValue placeholder={doctorsLoading ? "Loading…" : !form.date ? "Pick a date first" : "Select doctor…"} />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl">
-                                        {doctors.filter(d => !d.on_leave).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
+                                        {availableDoctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
+                                        {!doctorsLoading && availableDoctors.length === 0 && (
+                                            <div className="px-3 py-2 text-xs text-gray-400 text-center">No available doctors on this date</div>
+                                        )}
                                     </SelectContent>
                                 </Select>
                             </Field>
                             <Field label="Assisting Doctor">
-                                <Select value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")}>
+                                <Select value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")} disabled={doctorsLoading || !form.date}>
                                     <SelectTrigger className="w-full h-10 rounded-xl text-sm">
                                         <SelectValue placeholder="None" />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl">
-                                        {doctors.filter(d => d.id !== form.doctor_id).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
+                                        {availableDoctors.filter(d => d.id !== form.doctor_id).map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </Field>

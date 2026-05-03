@@ -82,4 +82,7 @@ export const doctorsApi = {
         request<DoctorLeavePeriod>(`/doctors/${id}/leave-periods`, { method: "POST", body: JSON.stringify(data) }),
     deleteLeave: (id: string, leaveId: string) =>
         request<null>(`/doctors/${id}/leave-periods/${leaveId}`, { method: "DELETE" }),
+    /** Returns only doctors not on leave on the given date. */
+    listAvailable: (date: string, params?: Record<string, string>) =>
+        request<Doctor[]>(`/doctors/available?${new URLSearchParams({ date, ...params })}`),
 };

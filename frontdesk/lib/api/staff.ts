@@ -69,4 +69,7 @@ export const doctorsApi = {
         request<DoctorAvailabilitySlot[]>(`/doctors/${id}/availability`, { method: "PUT", body: JSON.stringify(slots) }),
     listLeave: (id: string) =>
         request<DoctorLeavePeriod[]>(`/doctors/${id}/leave-periods`),
+    /** Returns only doctors not on leave on the given date. */
+    listAvailable: (date: string, params?: Record<string, string>) =>
+        request<Doctor[]>(`/doctors/available?${new URLSearchParams({ date, ...params })}`),
 };

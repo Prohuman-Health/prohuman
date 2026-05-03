@@ -23,6 +23,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get(   "/",                         c.listDoctors);
+router.get(   "/available",                c.listAvailableDoctors);
 router.get(   "/:id",                      c.getDoctor);
 router.patch( "/:id",   authorize("admin"), validate(z.object({ specialty: z.string().optional(), bio: z.string().optional() })), c.updateDoctor);
 
