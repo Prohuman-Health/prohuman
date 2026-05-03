@@ -5,23 +5,39 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 
 export const listDoctors = asyncHandler(async (req: Request, res: Response) => {
-  const { branch_id, is_active = "true" } = req.query as Record<string, string>;
+  const { branch_id, is_active = "true", include_on_leave } = req.query as Record<string, string>;
   const conditions: string[] = [];
   const vals: unknown[] = [];
   let i = 1;
 
   // Default: return only active doctors (is_active=true); pass is_active=false to list inactive ones
-  conditions.push(`s.is_active = $${i++}`);
-  vals.push(is_active !== "false");
+  // include_on_leave=true: include doctors who are on temporary leave (is_active still true on staff)
+  if (is_active !== "all") {
+    conditions.push(`s.is_active = $${i++}`);
+    vals.push(is_active !== "false");
+  }
 
   if (branch_id) { conditions.push(`s.branch_id = $${i++}`); vals.push(branch_id); }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const sql = `
     SELECT d.id, d.specialty, d.bio,
-           s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active
+           s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active,
+           lp.id         AS leave_id,
+           lp.from_date  AS leave_from,
+           lp.to_date    AS leave_to,
+           lp.reason     AS leave_reason,
+           (lp.id IS NOT NULL AND CURRENT_DATE BETWEEN lp.from_date AND lp.to_date) AS on_leave
     FROM doctors d
     JOIN staff s ON s.id = d.staff_id
+    LEFT JOIN LATERAL (
+      SELECT id, from_date, to_date, reason
+      FROM doctor_leave_periods
+      WHERE doctor_id = d.id
+        AND CURRENT_DATE BETWEEN from_date AND to_date
+      ORDER BY from_date
+      LIMIT 1
+    ) lp ON TRUE
     ${where}
     ORDER BY s.full_name
   `;
@@ -32,8 +48,23 @@ export const listDoctors = asyncHandler(async (req: Request, res: Response) => {
 export const getDoctor = asyncHandler(async (req: Request, res: Response) => {
   const result = await query(
     `SELECT d.id, d.specialty, d.bio,
-            s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active
-     FROM doctors d JOIN staff s ON s.id = d.staff_id WHERE d.id = $1`,
+            s.id AS staff_id, s.full_name, s.email, s.phone, s.branch_id, s.is_active,
+            lp.id         AS leave_id,
+            lp.from_date  AS leave_from,
+            lp.to_date    AS leave_to,
+            lp.reason     AS leave_reason,
+            (lp.id IS NOT NULL AND CURRENT_DATE BETWEEN lp.from_date AND lp.to_date) AS on_leave
+     FROM doctors d
+     JOIN staff s ON s.id = d.staff_id
+     LEFT JOIN LATERAL (
+       SELECT id, from_date, to_date, reason
+       FROM doctor_leave_periods
+       WHERE doctor_id = d.id
+         AND CURRENT_DATE BETWEEN from_date AND to_date
+       ORDER BY from_date
+       LIMIT 1
+     ) lp ON TRUE
+     WHERE d.id = $1`,
     [req.params.id]
   );
   if (!result.rows[0]) throw ApiError.notFound("Doctor not found");
@@ -105,5 +136,51 @@ export const updateAvailabilitySlot = asyncHandler(async (req: Request, res: Res
 
 export const deleteAvailabilitySlot = asyncHandler(async (req: Request, res: Response) => {
   await query("DELETE FROM doctor_availability WHERE id = $1 AND doctor_id = $2", [req.params.avId, req.params.id]);
+  ApiResponse.noContent(res);
+});
+
+// ── Leave / Inactive Periods ──────────────────────────────────────────────────
+
+export const listLeavePeriods = asyncHandler(async (req: Request, res: Response) => {
+  const result = await query(
+    `SELECT lp.*, s.full_name AS created_by_name
+     FROM doctor_leave_periods lp
+     LEFT JOIN staff s ON s.id = lp.created_by
+     WHERE lp.doctor_id = $1
+     ORDER BY lp.from_date DESC`,
+    [req.params.id]
+  );
+  ApiResponse.ok(res, result.rows);
+});
+
+export const addLeavePeriod = asyncHandler(async (req: Request, res: Response) => {
+  const { from_date, to_date, reason } = req.body;
+
+  // Check for overlapping periods
+  const overlap = await query(
+    `SELECT id FROM doctor_leave_periods
+     WHERE doctor_id = $1
+       AND from_date <= $3::date
+       AND to_date   >= $2::date`,
+    [req.params.id, from_date, to_date]
+  );
+  if (overlap.rows[0]) {
+    throw ApiError.conflict("A leave period already exists that overlaps with the selected dates.");
+  }
+
+  const result = await query(
+    `INSERT INTO doctor_leave_periods (doctor_id, from_date, to_date, reason, created_by)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [req.params.id, from_date, to_date, reason ?? null, req.user!.sub]
+  );
+  ApiResponse.created(res, result.rows[0]);
+});
+
+export const deleteLeavePeriod = asyncHandler(async (req: Request, res: Response) => {
+  const result = await query(
+    "DELETE FROM doctor_leave_periods WHERE id = $1 AND doctor_id = $2 RETURNING id",
+    [req.params.leaveId, req.params.id]
+  );
+  if (!result.rows[0]) throw ApiError.notFound("Leave period not found");
   ApiResponse.noContent(res);
 });

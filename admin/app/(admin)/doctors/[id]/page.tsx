@@ -5,14 +5,15 @@ import { useParams, useRouter } from "next/navigation";
 import {
     ArrowLeft, Phone, Mail, Stethoscope, User, Clock,
     CalendarDays, Activity, Plus, Pencil, Trash2, Check,
-    RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Loader2,
+    RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Loader2, BriefcaseOff, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
     doctorsApi, sessionsApi,
-    type Doctor, type DoctorAvailabilitySlot, type Session,
+    type Doctor, type DoctorAvailabilitySlot, type Session, type DoctorLeavePeriod,
 } from "@/lib/api";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
 
@@ -35,13 +36,24 @@ function Skeleton({ className }: { className?: string }) {
     return <div className={cn("animate-pulse bg-muted rounded-xl", className)} />;
 }
 
-function StatusBadge({ active }: { active: boolean }) {
+function StatusBadge({ active, onLeave }: { active: boolean; onLeave?: boolean }) {
+    if (!active) {
+        return (
+            <Badge variant="outline" className="text-[10px] rounded-full px-2.5 font-medium border-red-200 text-red-600 bg-red-50">
+                Deactivated
+            </Badge>
+        );
+    }
+    if (onLeave) {
+        return (
+            <Badge variant="outline" className="text-[10px] rounded-full px-2.5 font-medium border-amber-200 text-amber-700 bg-amber-50">
+                On Leave
+            </Badge>
+        );
+    }
     return (
-        <Badge variant="outline" className={cn(
-            "text-[10px] rounded-full px-2.5 font-medium capitalize",
-            active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-red-200 text-red-600 bg-red-50"
-        )}>
-            {active ? "Active" : "Unavailable"}
+        <Badge variant="outline" className="text-[10px] rounded-full px-2.5 font-medium border-emerald-200 text-emerald-700 bg-emerald-50">
+            Active
         </Badge>
     );
 }
@@ -137,6 +149,14 @@ export default function DoctorDetailPage() {
     // Schedule session modal
     const [scheduleOpen, setScheduleOpen] = useState(false);
 
+    // Leave periods
+    const [leavePeriods, setLeavePeriods] = useState<DoctorLeavePeriod[]>([]);
+    const [leaveLoading, setLeaveLoading] = useState(false);
+    const [leaveError, setLeaveError] = useState<string | null>(null);
+    const [addingLeave, setAddingLeave] = useState(false);
+    const [leaveSaving, setLeaveSaving] = useState(false);
+    const [leaveForm, setLeaveForm] = useState({ from_date: "", to_date: "", reason: "" });
+
     // ── Load doctor ──────────────────────────────────────────────────────────
     useEffect(() => {
         if (!id) return;
@@ -188,6 +208,23 @@ export default function DoctorDetailPage() {
     useEffect(() => {
         if (tab === "schedule") loadSlots();
     }, [tab, loadSlots]);
+
+    // ── Load leave periods ────────────────────────────────────────────────────
+    const loadLeave = useCallback(async () => {
+        if (!id) return;
+        setLeaveLoading(true);
+        setLeaveError(null);
+        try {
+            const data = await doctorsApi.listLeave(id);
+            setLeavePeriods(data);
+        } catch {
+            setLeaveError("Failed to load leave periods.");
+        } finally {
+            setLeaveLoading(false);
+        }
+    }, [id]);
+
+    useEffect(() => { if (id) loadLeave(); }, [id, loadLeave]);
 
     // ── Calendar ─────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -259,6 +296,42 @@ export default function DoctorDetailPage() {
         setSlotFormData({ start_time: s.start_time, end_time: s.end_time, label: s.label ?? "", is_active: s.is_active });
     }
 
+    async function saveLeave() {
+        if (!id || !leaveForm.from_date || !leaveForm.to_date) return;
+        setLeaveSaving(true);
+        setLeaveError(null);
+        try {
+            await doctorsApi.addLeave(id, {
+                from_date: leaveForm.from_date,
+                to_date: leaveForm.to_date,
+                reason: leaveForm.reason || undefined,
+            });
+            setAddingLeave(false);
+            setLeaveForm({ from_date: "", to_date: "", reason: "" });
+            await loadLeave();
+            // Refresh doctor to update on_leave status
+            const updated = await doctorsApi.get(id);
+            setDoctor(updated);
+        } catch (e: unknown) {
+            setLeaveError(e instanceof Error ? e.message : "Could not save leave period.");
+        } finally {
+            setLeaveSaving(false);
+        }
+    }
+
+    async function deleteLeave(leaveId: string) {
+        if (!id) return;
+        try {
+            await doctorsApi.deleteLeave(id, leaveId);
+            setLeavePeriods(prev => prev.filter(l => l.id !== leaveId));
+            // Refresh doctor on_leave status
+            const updated = await doctorsApi.get(id);
+            setDoctor(updated);
+        } catch {
+            setLeaveError("Could not remove leave period.");
+        }
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
     const initials = doctor?.full_name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() ?? "??";
 
@@ -322,7 +395,12 @@ export default function DoctorDetailPage() {
                             <p className="font-bold text-base">{doctor.full_name}</p>
                             {doctor.specialty && <p className="text-xs text-muted-foreground mt-0.5">{doctor.specialty}</p>}
                         </div>
-                        <StatusBadge active={doctor.is_active} />
+                        <StatusBadge active={doctor.is_active} onLeave={doctor.on_leave} />
+                        {doctor.on_leave && doctor.leave_to && (
+                            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-tight w-full text-center">
+                                On leave until {new Date(doctor.leave_to).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                        )}
                     </div>
 
                     {/* Info card */}
@@ -366,6 +444,79 @@ export default function DoctorDetailPage() {
                             <p className="text-xl font-bold">{slots.length}</p>
                             <p className="text-[10px] text-muted-foreground mt-0.5">Avail. Slots</p>
                         </div>
+                    </div>
+
+                    {/* Leave Periods card */}
+                    <div className="bg-white rounded-2xl p-4 border border-border/50">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Leave Periods</p>
+                            {!addingLeave && (
+                                <button onClick={() => setAddingLeave(true)}
+                                    className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors">
+                                    <Plus className="w-3 h-3" /> Add
+                                </button>
+                            )}
+                        </div>
+                        {leaveError && (
+                            <p className="text-[11px] text-red-600 mb-2">{leaveError}</p>
+                        )}
+                        {addingLeave && (
+                            <div className="space-y-2 mb-3 p-3 bg-muted/40 rounded-xl">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <p className="text-[10px] text-muted-foreground mb-1">From</p>
+                                        <Input type="date" value={leaveForm.from_date}
+                                            onChange={e => setLeaveForm(f => ({ ...f, from_date: e.target.value }))}
+                                            className="h-7 text-xs" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-muted-foreground mb-1">To</p>
+                                        <Input type="date" value={leaveForm.to_date}
+                                            onChange={e => setLeaveForm(f => ({ ...f, to_date: e.target.value }))}
+                                            className="h-7 text-xs" />
+                                    </div>
+                                </div>
+                                <Input placeholder="Reason (optional)" value={leaveForm.reason}
+                                    onChange={e => setLeaveForm(f => ({ ...f, reason: e.target.value }))}
+                                    className="h-7 text-xs" />
+                                <div className="flex gap-1.5">
+                                    <Button size="sm" className="h-6 text-[10px] px-2 flex-1" onClick={saveLeave} disabled={leaveSaving || !leaveForm.from_date || !leaveForm.to_date}>
+                                        {leaveSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2"
+                                        onClick={() => { setAddingLeave(false); setLeaveError(null); }}>
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                        {leaveLoading ? (
+                            <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+                        ) : leavePeriods.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground text-center py-2">No leave periods</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {leavePeriods.map(lp => {
+                                    const from = new Date(lp.from_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+                                    const to = new Date(lp.to_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+                                    const today = new Date().toISOString().slice(0, 10);
+                                    const active = lp.from_date <= today && today <= lp.to_date;
+                                    return (
+                                        <div key={lp.id} className={cn("flex items-start gap-2 p-2.5 rounded-xl", active ? "bg-amber-50 border border-amber-200" : "bg-muted/40")}>
+                                            <BriefcaseOff className={cn("w-3 h-3 mt-0.5 shrink-0", active ? "text-amber-600" : "text-muted-foreground")} />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[11px] font-medium">{from} – {to}</p>
+                                                {lp.reason && <p className="text-[10px] text-muted-foreground truncate">{lp.reason}</p>}
+                                            </div>
+                                            <button onClick={() => deleteLeave(lp.id)}
+                                                className="text-muted-foreground hover:text-red-500 transition-colors">
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </div>
 

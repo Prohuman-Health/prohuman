@@ -56,6 +56,8 @@ export const sessionsApi = {
         request<Session>("/sessions", { method: "POST", body: JSON.stringify(data) }),
     cancel: (id: string, reason: string) =>
         request<null>(`/sessions/${id}/cancel`, { method: "PATCH", body: JSON.stringify({ reason }) }),
+    reschedule: (id: string, data: { scheduled_at: string; doctor_id?: string; reason?: string }) =>
+        request<Session>(`/sessions/${id}/reschedule`, { method: "PATCH", body: JSON.stringify(data) }),
     markAttendance: (id: string, attendance: string) =>
         request<null>(`/sessions/${id}/attendance`, { method: "PATCH", body: JSON.stringify({ attendance }) }),
     // Form

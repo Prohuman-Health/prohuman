@@ -43,6 +43,16 @@ passport.use(
                 if (result.rows[0]) {
                     // Existing OAuth user
                     if (!result.rows[0].is_active) return done(new Error("Account is deactivated"), undefined);
+                    // Block if doctor is on leave
+                    if (result.rows[0].role === "doctor") {
+                        const leave = await query(
+                            `SELECT dlp.to_date FROM doctor_leave_periods dlp
+                             JOIN doctors d ON d.id = dlp.doctor_id
+                             WHERE d.staff_id = $1 AND CURRENT_DATE BETWEEN dlp.from_date AND dlp.to_date LIMIT 1`,
+                            [result.rows[0].id]
+                        );
+                        if (leave.rows[0]) return done(new Error("Account is on leave"), undefined);
+                    }
                     return done(null, result.rows[0] as Express.User);
                 }
 
@@ -54,6 +64,16 @@ passport.use(
 
                 if (result.rows[0]) {
                     if (!result.rows[0].is_active) return done(new Error("Account is deactivated"), undefined);
+                    // Block if doctor is on leave
+                    if (result.rows[0].role === "doctor") {
+                        const leave = await query(
+                            `SELECT dlp.to_date FROM doctor_leave_periods dlp
+                             JOIN doctors d ON d.id = dlp.doctor_id
+                             WHERE d.staff_id = $1 AND CURRENT_DATE BETWEEN dlp.from_date AND dlp.to_date LIMIT 1`,
+                            [result.rows[0].id]
+                        );
+                        if (leave.rows[0]) return done(new Error("Account is on leave"), undefined);
+                    }
                     // Link Google ID to existing email-based account
                     await query(
                         "UPDATE staff SET google_id = $1, avatar_url = $2, updated_at = NOW() WHERE id = $3",

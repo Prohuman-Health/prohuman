@@ -77,6 +77,26 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   if (!(await bcrypt.compare(password, staff.password_hash))) throw ApiError.unauthorized("Invalid email or password");
   if (!staff.is_active) throw ApiError.forbidden("Account is deactivated");
 
+  // Block login if the staff member is a doctor with an active leave period
+  if (staff.role === "doctor") {
+    const leave = await query(
+      `SELECT dlp.from_date, dlp.to_date, dlp.reason
+       FROM doctor_leave_periods dlp
+       JOIN doctors d ON d.id = dlp.doctor_id
+       WHERE d.staff_id = $1
+         AND CURRENT_DATE BETWEEN dlp.from_date AND dlp.to_date
+       LIMIT 1`,
+      [staff.id]
+    );
+    if (leave.rows[0]) {
+      const lv = leave.rows[0];
+      const until = new Date(lv.to_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+      throw ApiError.forbidden(
+        `Account is on leave until ${until}.${lv.reason ? ` Reason: ${lv.reason}` : ""}`
+      );
+    }
+  }
+
   const token = mintToken(staff);
   ApiResponse.ok(res, {
     token,

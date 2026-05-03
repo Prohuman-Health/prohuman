@@ -13,6 +13,12 @@ export const availabilitySchema = z.object({
   is_active:   z.boolean().optional().default(true),
 });
 
+const leavePeriodSchema = z.object({
+  from_date: z.string().date(),
+  to_date:   z.string().date(),
+  reason:    z.string().max(300).optional(),
+}).refine(d => d.to_date >= d.from_date, { message: "to_date must be on or after from_date" });
+
 const router = Router();
 router.use(authenticate);
 
@@ -26,5 +32,10 @@ router.put(   "/:id/availability",   authorize("admin"),  validate(z.array(avail
 router.post(  "/:id/availability",   authorize("admin"),  validate(availabilitySchema), c.addAvailabilitySlot);
 router.patch( "/:id/availability/:avId", authorize("admin"), validate(availabilitySchema.partial()), c.updateAvailabilitySlot);
 router.delete("/:id/availability/:avId", authorize("admin"), c.deleteAvailabilitySlot);
+
+// Leave / inactive period management (admin-only)
+router.get(   "/:id/leave-periods",                          c.listLeavePeriods);
+router.post(  "/:id/leave-periods", authorize("admin"), validate(leavePeriodSchema), c.addLeavePeriod);
+router.delete("/:id/leave-periods/:leaveId", authorize("admin"), c.deleteLeavePeriod);
 
 export default router;

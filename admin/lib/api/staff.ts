@@ -29,6 +29,23 @@ export interface Doctor {
     id: string; staff_id: string; full_name: string; email: string;
     phone: string | null; specialty: string | null; bio: string | null; is_active: boolean;
     branch_id: string | null;
+    // Leave / inactive period fields (present on getDoctor / listDoctors responses)
+    on_leave?: boolean;
+    leave_id?: string | null;
+    leave_from?: string | null;
+    leave_to?: string | null;
+    leave_reason?: string | null;
+}
+
+export interface DoctorLeavePeriod {
+    id: string;
+    doctor_id: string;
+    from_date: string;
+    to_date: string;
+    reason: string | null;
+    created_by: string | null;
+    created_by_name: string | null;
+    created_at: string;
 }
 
 export interface DoctorAvailabilitySlot {
@@ -58,4 +75,11 @@ export const doctorsApi = {
         request<null>(`/doctors/${id}/availability/${slotId}`, { method: "DELETE" }),
     setAvailability: (id: string, slots: Omit<DoctorAvailabilitySlot, "id" | "doctor_id">[]) =>
         request<DoctorAvailabilitySlot[]>(`/doctors/${id}/availability`, { method: "PUT", body: JSON.stringify(slots) }),
+    // Leave / inactive period management
+    listLeave: (id: string) =>
+        request<DoctorLeavePeriod[]>(`/doctors/${id}/leave-periods`),
+    addLeave: (id: string, data: { from_date: string; to_date: string; reason?: string }) =>
+        request<DoctorLeavePeriod>(`/doctors/${id}/leave-periods`, { method: "POST", body: JSON.stringify(data) }),
+    deleteLeave: (id: string, leaveId: string) =>
+        request<null>(`/doctors/${id}/leave-periods/${leaveId}`, { method: "DELETE" }),
 };

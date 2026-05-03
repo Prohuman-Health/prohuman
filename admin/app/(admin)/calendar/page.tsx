@@ -3,16 +3,18 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
     ChevronLeft, ChevronRight, Plus, Clock, RefreshCw, Filter, X,
-    CalendarDays, LayoutGrid, Ban,
+    CalendarDays, LayoutGrid, Ban, AlertCircle, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useStaff } from "@/lib/contexts/staff-context";
 import { useCatalog } from "@/lib/contexts/catalog-context";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
-import { calendarApi, settingsApi, type Session, type ClinicClosure } from "@/lib/api";
+import { calendarApi, settingsApi, sessionsApi, type Session, type ClinicClosure, type Doctor } from "@/lib/api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -77,9 +79,140 @@ type CalendarClosureView = {
     source: "calendar" | "settings_date" | "settings_weekly";
 };
 
+// ── Session Edit Modal ────────────────────────────────────────────────────────
+function SessionEditModal({
+    session, doctors, loading, error, onClose, onSave,
+}: {
+    session: Session;
+    doctors: Doctor[];
+    loading: boolean;
+    error: string | null;
+    onClose: () => void;
+    onSave: (updates: { scheduled_at: string; doctor_id?: string; reason?: string }) => void;
+}) {
+    const dt = new Date(session.scheduled_at);
+    const [date, setDate] = useState(dt.toISOString().slice(0, 10));
+    const [time, setTime] = useState(
+        `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
+    );
+    const [doctorId, setDoctorId] = useState(session.doctor_id);
+    const [reason, setReason] = useState("");
+
+    const isDirty = date !== dt.toISOString().slice(0, 10)
+        || time !== `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
+        || doctorId !== session.doctor_id;
+
+    function handleSave() {
+        const scheduled_at = new Date(`${date}T${time}:00`).toISOString();
+        const updates: { scheduled_at: string; doctor_id?: string; reason?: string } = { scheduled_at };
+        if (doctorId !== session.doctor_id) updates.doctor_id = doctorId;
+        if (reason.trim()) updates.reason = reason.trim();
+        onSave(updates);
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                        <h3 className="font-bold text-sm">Edit Session</h3>
+                    </div>
+                    <button onClick={onClose} className="w-7 h-7 rounded-lg bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center">
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+
+                {/* Read-only info */}
+                <div className="px-5 pt-4 pb-2 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                        <p className="text-[11px] uppercase text-muted-foreground font-semibold">Patient</p>
+                        <p className="font-medium truncate">{session.patient_name}</p>
+                    </div>
+                    <div>
+                        <p className="text-[11px] uppercase text-muted-foreground font-semibold">Session Type</p>
+                        <p className="font-medium truncate">{session.session_type_name}</p>
+                    </div>
+                    <div>
+                        <p className="text-[11px] uppercase text-muted-foreground font-semibold">Duration</p>
+                        <p className="font-medium">{session.duration_minutes} min</p>
+                    </div>
+                    <div>
+                        <p className="text-[11px] uppercase text-muted-foreground font-semibold">Status</p>
+                        <p className="font-medium capitalize">{session.status}</p>
+                    </div>
+                </div>
+
+                {/* Editable fields */}
+                <div className="px-5 pb-4 space-y-3 text-sm">
+                    <div className="h-px bg-border/60 my-2" />
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] uppercase text-muted-foreground font-semibold block">Date</label>
+                            <Input
+                                type="date"
+                                value={date}
+                                onChange={e => setDate(e.target.value)}
+                                className="rounded-xl text-sm h-9"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] uppercase text-muted-foreground font-semibold block">Time</label>
+                            <Input
+                                type="time"
+                                value={time}
+                                onChange={e => setTime(e.target.value)}
+                                className="rounded-xl text-sm h-9"
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] uppercase text-muted-foreground font-semibold block">Doctor</label>
+                        <Select value={doctorId} onValueChange={setDoctorId}>
+                            <SelectTrigger className="rounded-xl h-9 text-sm">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {doctors.map(d => (
+                                    <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] uppercase text-muted-foreground font-semibold block">Reason <span className="normal-case font-normal text-muted-foreground">(optional)</span></label>
+                        <Input
+                            placeholder="e.g. Patient requested earlier slot"
+                            value={reason}
+                            onChange={e => setReason(e.target.value)}
+                            className="rounded-xl text-sm h-9"
+                        />
+                    </div>
+                    {error && (
+                        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            {error}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-4 border-t border-border/60 flex items-center justify-end gap-2">
+                    <Button variant="outline" className="rounded-xl" onClick={onClose} disabled={loading}>Cancel</Button>
+                    <Button className="rounded-xl" onClick={handleSave} disabled={loading || !isDirty}>
+                        {loading ? "Saving…" : "Save Changes"}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Day View ──────────────────────────────────────────────────────────────────
 function DayView({
-    date, sessions, doctorColorMap, sessionTypeColorMap, onAddSession, closureReason, onSessionClick, onEmptySlotClick,
+    date, sessions, doctorColorMap, sessionTypeColorMap, onAddSession, closureReason, onSessionClick, onEmptySlotClick, onSessionDrop,
 }: {
     date: Date;
     sessions: Session[];
@@ -89,8 +222,11 @@ function DayView({
     closureReason?: string | null;
     onSessionClick?: (session: Session) => void;
     onEmptySlotClick?: (hour: number) => void;
+    onSessionDrop?: (sessionId: string, newScheduledAt: string) => void;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const [dragOverSlot, setDragOverSlot] = useState<string | null>(null); // "HH:MM"
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -151,7 +287,10 @@ function DayView({
                 <div className="relative" style={{ height: `${HOURS.length * SLOT_HEIGHT}px` }}>
 
                     {/* Hour rows */}
-                    {HOURS.map((h, idx) => (
+                    {HOURS.map((h, idx) => {
+                        const slotKey00 = `${String(h).padStart(2, "0")}:00`;
+                        const slotKey30 = `${String(h).padStart(2, "0")}:30`;
+                        return (
                         <div key={h} className="absolute w-full flex"
                             style={{ top: `${idx * SLOT_HEIGHT}px`, height: `${SLOT_HEIGHT}px` }}>
                             {/* Time label */}
@@ -160,16 +299,46 @@ function DayView({
                                     {h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h - 12} PM`}
                                 </span>
                             </div>
-                            {/* Hour lane */}
-                            <div
-                                className="flex-1 border-t border-border/40 relative cursor-pointer hover:bg-muted/20 transition-colors"
-                                onClick={() => onEmptySlotClick?.(h)}
-                            >
-                                {/* Half-hour marker */}
-                                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20" />
+                            {/* Hour lane — split into two 30-min drop targets */}
+                            <div className="flex-1 border-t border-border/40 relative flex flex-col">
+                                {/* Top half (:00) */}
+                                <div
+                                    className={cn("flex-1 cursor-pointer transition-colors", draggingId ? (dragOverSlot === slotKey00 ? "bg-blue-50" : "hover:bg-muted/20") : "hover:bg-muted/20")}
+                                    onClick={() => !draggingId && onEmptySlotClick?.(h)}
+                                    onDragOver={(e) => { e.preventDefault(); setDragOverSlot(slotKey00); }}
+                                    onDragLeave={() => setDragOverSlot(null)}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setDragOverSlot(null);
+                                        const id = e.dataTransfer.getData("sessionId");
+                                        if (!id || !onSessionDrop) return;
+                                        const d = new Date(date);
+                                        d.setHours(h, 0, 0, 0);
+                                        onSessionDrop(id, d.toISOString());
+                                    }}
+                                />
+                                {/* Dashed half-hour divider */}
+                                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20 pointer-events-none" />
+                                {/* Bottom half (:30) */}
+                                <div
+                                    className={cn("flex-1 cursor-pointer transition-colors", draggingId ? (dragOverSlot === slotKey30 ? "bg-blue-50" : "hover:bg-muted/20") : "hover:bg-muted/20")}
+                                    onClick={() => !draggingId && onEmptySlotClick?.(h)}
+                                    onDragOver={(e) => { e.preventDefault(); setDragOverSlot(slotKey30); }}
+                                    onDragLeave={() => setDragOverSlot(null)}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setDragOverSlot(null);
+                                        const id = e.dataTransfer.getData("sessionId");
+                                        if (!id || !onSessionDrop) return;
+                                        const d = new Date(date);
+                                        d.setHours(h, 30, 0, 0);
+                                        onSessionDrop(id, d.toISOString());
+                                    }}
+                                />
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
 
                     {/* Current time indicator */}
                     {isToday && currentMinutes >= START_HOUR * 60 && currentMinutes <= END_HOUR * 60 && (
@@ -205,9 +374,13 @@ function DayView({
 
                         return (
                             <div key={s.id}
+                                draggable
+                                onDragStart={(e) => { e.dataTransfer.setData("sessionId", s.id); setDraggingId(s.id); }}
+                                onDragEnd={() => { setDraggingId(null); setDragOverSlot(null); }}
                                 onClick={(e) => { e.stopPropagation(); onSessionClick?.(s); }}
                                 className={cn(
-                                    "absolute left-16 rounded-xl border px-2.5 py-1.5 overflow-hidden cursor-pointer hover:shadow-md transition-shadow z-10",
+                                    "absolute left-16 rounded-xl border px-2.5 py-1.5 overflow-hidden cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow z-10",
+                                    draggingId === s.id && "opacity-40",
                                     bgCls
                                 )}
                                 style={{
@@ -257,6 +430,8 @@ export default function CalendarPage() {
     const [selectedDateForModal, setSelectedDateForModal] = useState<string | undefined>();
     const [selectedTimeForModal, setSelectedTimeForModal] = useState<string | undefined>();
     const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError] = useState<string | null>(null);
     const [closures, setClosures] = useState<ClinicClosure[]>([]);
     const [closuresLoading, setClosuresLoading] = useState(false);
     const [settingsClosedDates, setSettingsClosedDates] = useState<string[]>([]);
@@ -431,6 +606,34 @@ export default function CalendarPage() {
 
     function openExistingSession(session: Session) {
         setSelectedSession(session);
+        setEditError(null);
+    }
+
+    async function handleSessionDrop(sessionId: string, newScheduledAt: string) {
+        const session = filteredSessions.find(s => s.id === sessionId);
+        if (!session) return;
+        try {
+            await sessionsApi.reschedule(sessionId, { scheduled_at: newScheduledAt, reason: "Rescheduled via calendar drag" });
+            await refresh();
+        } catch (e: unknown) {
+            // silently ignore — could add a toast here
+            console.error("Drag reschedule failed", e);
+        }
+    }
+
+    async function handleSessionSave(updates: { scheduled_at: string; doctor_id?: string; reason?: string }) {
+        if (!selectedSession) return;
+        setEditLoading(true);
+        setEditError(null);
+        try {
+            await sessionsApi.reschedule(selectedSession.id, updates);
+            await refresh();
+            setSelectedSession(null);
+        } catch (e: unknown) {
+            setEditError(e instanceof Error ? e.message : "Failed to reschedule");
+        } finally {
+            setEditLoading(false);
+        }
     }
 
     return (
@@ -722,6 +925,7 @@ export default function CalendarPage() {
                             }}
                             onSessionClick={openExistingSession}
                             onEmptySlotClick={(hour) => openEmptyTimeSlot(hour, dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()))}
+                            onSessionDrop={handleSessionDrop}
                         />
                     </div>
                 </div>
@@ -885,54 +1089,14 @@ export default function CalendarPage() {
             )}
 
             {selectedSession && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedSession(null)} />
-                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
-                            <h3 className="font-bold text-sm">Session Info</h3>
-                            <button onClick={() => setSelectedSession(null)} className="w-7 h-7 rounded-lg bg-muted text-muted-foreground hover:text-foreground">
-                                <Plus className="w-3.5 h-3.5 rotate-45 mx-auto" />
-                            </button>
-                        </div>
-                        <div className="p-5 space-y-3 text-sm">
-                            <div>
-                                <p className="text-[11px] uppercase text-muted-foreground font-semibold">Patient</p>
-                                <p className="font-medium">{selectedSession.patient_name}</p>
-                            </div>
-                            <div>
-                                <p className="text-[11px] uppercase text-muted-foreground font-semibold">Doctor</p>
-                                <p className="font-medium">Dr. {selectedSession.doctor_name}</p>
-                            </div>
-                            <div>
-                                <p className="text-[11px] uppercase text-muted-foreground font-semibold">Session Type</p>
-                                <p className="font-medium">{selectedSession.session_type_name}</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Date</p>
-                                    <p className="font-medium">{new Date(selectedSession.scheduled_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Time</p>
-                                    <p className="font-medium">{new Date(selectedSession.scheduled_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Duration</p>
-                                    <p className="font-medium">{selectedSession.duration_minutes} min</p>
-                                </div>
-                                <div>
-                                    <p className="text-[11px] uppercase text-muted-foreground font-semibold">Status</p>
-                                    <p className="font-medium capitalize">{selectedSession.status}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="px-5 py-4 border-t border-border/60 flex justify-end">
-                            <Button variant="outline" className="rounded-xl" onClick={() => setSelectedSession(null)}>Close</Button>
-                        </div>
-                    </div>
-                </div>
+                <SessionEditModal
+                    session={selectedSession}
+                    doctors={doctors}
+                    loading={editLoading}
+                    error={editError}
+                    onClose={() => setSelectedSession(null)}
+                    onSave={handleSessionSave}
+                />
             )}
 
         </div>
