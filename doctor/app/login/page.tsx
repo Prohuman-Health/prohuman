@@ -73,7 +73,7 @@ function LoginInner() {
                 <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[#DCB13C] opacity-5" />
 
                 <div className="relative z-10">
-                    <Image src="/logo-t.png" alt="ProHuman Health" width={260} height={80}
+                    <Image src="/logo.png" alt="ProHuman Health" width={260} height={80}
                         className="object-contain" priority
                         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 </div>
@@ -109,7 +109,7 @@ function LoginInner() {
             <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
                 <div className="w-full max-w-sm space-y-7">
                     <div className="lg:hidden mb-2">
-                        <Image src="/logo-t.png" alt="ProHuman Health" width={160} height={48}
+                        <Image src="/logo.png" alt="ProHuman Health" width={160} height={48}
                             className="object-contain" priority
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     </div>

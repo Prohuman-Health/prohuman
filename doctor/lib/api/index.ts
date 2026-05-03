@@ -8,3 +8,5 @@ export type { GCalStatus, GCalEvent } from "./gcal";
 export { patientsApi } from "./patients";
 export type { Patient, PatientSession, TimelineItem, PatientListResponse } from "./patients";
 export type { SessionFormData, SessionFormQuestion, SessionFormResponse, SessionFormAnswer } from "./sessions";
+export { leaveApi } from "./leave";
+export type { DoctorLeavePeriod } from "./leave";
