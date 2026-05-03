@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
     CalendarDays, Clock, CheckCircle2, XCircle, AlertTriangle,
-    Search, RefreshCw, ChevronRight, Stethoscope, Filter,
+    Search, RefreshCw, ChevronRight, Stethoscope, Filter, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sessionsApi, Session } from "@/lib/api";
@@ -178,6 +178,15 @@ export default function SessionsPage() {
                                             {dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                                         </span>
                                         <span className="text-xs text-gray-400">{s.branch_name}</span>
+                                        {s.form_id && (
+                                            s.form_response_count
+                                                ? <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
+                                                    <CheckCircle2 className="w-3 h-3" />Form filled
+                                                  </span>
+                                                : <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
+                                                    <ClipboardList className="w-3 h-3" />Fill form
+                                                  </span>
+                                        )}
                                     </div>
                                 </div>
                                 <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />

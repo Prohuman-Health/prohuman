@@ -5,10 +5,11 @@ import { useSearchParams } from "next/navigation";
 import {
     CalendarDays, Clock, CheckCircle2, XCircle, AlertTriangle,
     RefreshCw, ChevronLeft, ChevronRight, Stethoscope, Filter,
-    Link2, Link2Off, Loader2, Ban,
+    Link2, Link2Off, Loader2, Ban, Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { sessionsApi, gcalApi, Session, GCalEvent, GCalStatus } from "@/lib/api";
+import { sessionsApi, gcalApi, leaveApi, Session, GCalEvent, GCalStatus, DoctorLeavePeriod } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function today(): string {
@@ -193,13 +194,14 @@ function GCalConnectPanel({
 
 // ── Day column (week view) ─────────────────────────────────────────────────────
 function DayColumn({
-    date, sessions, gcalEvents, isToday, isSelected, onClick,
+    date, sessions, gcalEvents, isToday, isSelected, onLeave, onClick,
 }: {
     date: string;
     sessions: Session[];
     gcalEvents: GCalEvent[];
     isToday: boolean;
     isSelected: boolean;
+    onLeave: boolean;
     onClick: () => void;
 }) {
     const d = new Date(date + "T00:00:00");
@@ -228,6 +230,9 @@ function DayColumn({
                 {hasBusy && (
                     <span className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-red-200" : "bg-red-400")} />
                 )}
+                {onLeave && (
+                    <span className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-amber-200" : "bg-amber-400")} />
+                )}
             </div>
         </button>
     );
@@ -236,6 +241,7 @@ function DayColumn({
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function SchedulePage() {
     const searchParams = useSearchParams();
+    const { user } = useAuth();
 
     const [selectedDate, setSelectedDate] = useState(today());
     const [weekStart, setWeekStart] = useState(() => weekRange(today()).start);
@@ -247,6 +253,7 @@ export default function SchedulePage() {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [leavePeriods, setLeavePeriods] = useState<DoctorLeavePeriod[]>([]);
 
     // Google Calendar state
     const [gcalStatus, setGcalStatus] = useState<GCalStatus | null>(null);
@@ -274,6 +281,14 @@ export default function SchedulePage() {
             .catch(() => setGcalStatus({ connected: false }))
             .finally(() => setGcalStatusLoading(false));
     }, []);
+
+    // Load doctor's own leave periods
+    useEffect(() => {
+        if (!user?.doctor_id) return;
+        leaveApi.list(user.doctor_id)
+            .then(setLeavePeriods)
+            .catch(() => setLeavePeriods([]));
+    }, [user?.doctor_id]);
 
     const loadWeek = useCallback(async (start: string, silent = false) => {
         if (!silent) setLoading(true);
@@ -349,6 +364,12 @@ export default function SchedulePage() {
         ? daySessions
         : daySessions.filter(s => s.status === statusFilter);
 
+    const isDateOnLeave = (date: string) =>
+        leavePeriods.some(lp => date >= lp.from_date && date <= lp.to_date);
+    const activeLeavePeriod = leavePeriods.find(
+        lp => selectedDate >= lp.from_date && selectedDate <= lp.to_date
+    ) ?? null;
+
     // Merge + sort clinic sessions and gcal events for display
     type DisplayItem = { type: "session"; data: Session } | { type: "gcal"; data: GCalEvent };
     const displayItems: DisplayItem[] = [
@@ -417,11 +438,26 @@ export default function SchedulePage() {
                             gcalEvents={weekGcalEvents[date] ?? []}
                             isToday={date === today()}
                             isSelected={date === selectedDate}
+                            onLeave={isDateOnLeave(date)}
                             onClick={() => handleDateClick(date)}
                         />
                     ))}
                 </div>
             </div>
+
+            {/* ── Leave banner ─────────────────────────────────────────────── */}
+            {activeLeavePeriod && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
+                    <Briefcase className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="flex-1">
+                        <p className="font-semibold">You are on leave</p>
+                        <p className="text-[11px] text-amber-600 mt-0.5">
+                            {activeLeavePeriod.from_date} – {activeLeavePeriod.to_date}
+                            {activeLeavePeriod.reason ? ` · ${activeLeavePeriod.reason}` : ""}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* ── Filter + overlay toggle row ──────────────────────────────── */}
             <div className="flex items-center gap-2 overflow-x-auto">

@@ -21,7 +21,7 @@ async function generatePatientCode(): Promise<string> {
 }
 
 export const listPatients = asyncHandler(async (req: Request, res: Response) => {
-  const { branch_id, status, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { branch_id, status, doctor_id, page = "1", limit = "20", search } = req.query as Record<string, string>;
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const conditions = ["1=1"];
   const vals: unknown[] = [];
@@ -29,6 +29,14 @@ export const listPatients = asyncHandler(async (req: Request, res: Response) => 
   if (branch_id) { conditions.push(`branch_id = $${i++}`);  vals.push(branch_id); }
   if (status === "active")     { conditions.push(`is_active = TRUE`); }
   if (status === "discharged") { conditions.push(`is_active = FALSE`); }
+  if (doctor_id) {
+    conditions.push(`id IN (SELECT DISTINCT patient_id FROM sessions WHERE doctor_id = $${i++})`);
+    vals.push(doctor_id);
+  }
+  if (search) {
+    conditions.push(`(full_name ILIKE $${i++} OR phone ILIKE $${i - 1} OR patient_code ILIKE $${i - 1})`);
+    vals.push(`%${search}%`);
+  }
 
   vals.push(parseInt(limit), offset);
   const result = await query(
@@ -42,14 +50,21 @@ export const listPatients = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const searchPatients = asyncHandler(async (req: Request, res: Response) => {
-  const { q } = req.query as Record<string, string>;
+  const { q, doctor_id } = req.query as Record<string, string>;
   if (!q || q.length < 2) throw ApiError.badRequest("Query must be at least 2 characters");
+  const conditions = [`(full_name ILIKE $1 OR phone ILIKE $1 OR patient_code ILIKE $1)`];
+  const vals: unknown[] = [`%${q}%`];
+  let i = 2;
+  if (doctor_id) {
+    conditions.push(`id IN (SELECT DISTINCT patient_id FROM sessions WHERE doctor_id = $${i++})`);
+    vals.push(doctor_id);
+  }
   const result = await query(
     `SELECT id, patient_code, full_name, age, gender, phone, email, is_active
      FROM patients
-     WHERE full_name ILIKE $1 OR phone ILIKE $1 OR patient_code ILIKE $1
+     WHERE ${conditions.join(" AND ")}
      ORDER BY full_name LIMIT 20`,
-    [`%${q}%`]
+    vals
   );
   ApiResponse.ok(res, result.rows);
 });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { patientsApi, type Patient } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 interface GlobalSearchProps {
     onClose: () => void;
@@ -12,6 +13,7 @@ interface GlobalSearchProps {
 
 export function GlobalSearch({ onClose }: GlobalSearchProps) {
     const router = useRouter();
+    const { user } = useAuth();
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(false);
@@ -37,7 +39,9 @@ export function GlobalSearch({ onClose }: GlobalSearchProps) {
         debounceRef.current = setTimeout(async () => {
             setLoading(true);
             try {
-                const res = await patientsApi.list({ search: q, limit: "8" });
+                const params: Record<string, string> = { search: q, limit: "8" };
+                if (user?.doctor_id) params.doctor_id = user.doctor_id;
+                const res = await patientsApi.list(params);
                 setResults(res.patients);
                 setCursor(0);
             } catch {

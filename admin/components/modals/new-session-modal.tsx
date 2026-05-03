@@ -11,7 +11,8 @@ import { useStaff } from "@/lib/contexts/staff-context";
 import { useSessionTypes } from "@/lib/contexts/catalog-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
 import { useAuth } from "@/lib/auth-context";
-import { sessionsApi, branchesApi, calendarApi, Branch } from "@/lib/api";
+import { sessionsApi, branchesApi, calendarApi, doctorsApi, Branch } from "@/lib/api";
+import type { DoctorLeavePeriod } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -32,6 +33,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [apiError, setApiError] = useState<string | null>(null);
     const [isClosedDay, setIsClosedDay] = useState(false);
     const [closedReason, setClosedReason] = useState<string | null>(null);
+    const [doctorLeave, setDoctorLeave] = useState<DoctorLeavePeriod | null>(null);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -79,6 +81,19 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         }
     }, [open, user?.branch_id, prefill?.date, prefill?.patientId, prefill?.doctorId, refreshSessionTypes]);
 
+    // Check if selected doctor is on leave on the selected date
+    useEffect(() => {
+        if (!form.doctor_id || !form.date) { setDoctorLeave(null); return; }
+        doctorsApi.listLeave(form.doctor_id)
+            .then(periods => {
+                const active = periods.find(
+                    lp => form.date >= lp.from_date && form.date <= lp.to_date
+                ) ?? null;
+                setDoctorLeave(active);
+            })
+            .catch(() => setDoctorLeave(null));
+    }, [form.doctor_id, form.date]);
+
     useEffect(() => {
         if (!open || !form.date) return;
         calendarApi.listClosures({ from: form.date, to: form.date })
@@ -113,6 +128,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!form.time) errs.time = "Time is required";
         if (!form.branch_id) errs.branch_id = "Select a branch";
         if (isClosedDay) errs.date = "Clinic is closed on selected date";
+        if (doctorLeave) errs.doctor_id = `Doctor is on leave until ${doctorLeave.to_date}`;
         if (form.date && form.time) {
             const selectedDateTime = new Date(`${form.date}T${form.time}:00`);
             if (Number.isNaN(selectedDateTime.getTime())) {
@@ -236,9 +252,14 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                         <SelectValue placeholder="Select doctor…" />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl">
-                                        {doctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
+                                        {doctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}{d.on_leave ? " (on leave)" : ""}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
+                                {doctorLeave && (
+                                    <p className="text-[11px] text-amber-600 font-medium mt-1">
+                                        On leave {doctorLeave.from_date} – {doctorLeave.to_date}{doctorLeave.reason ? `: ${doctorLeave.reason}` : ""}
+                                    </p>
+                                )}
                             </Field>
                             <Field label="Assisting Doctor">
                                 <Select value={form.assisting_doctor_id} onValueChange={setVal("assisting_doctor_id")}>

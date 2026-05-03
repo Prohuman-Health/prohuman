@@ -43,7 +43,9 @@ export const listSessions = asyncHandler(async (req: Request, res: Response) => 
   const result = await query(
     `SELECT s.*, p.full_name AS patient_name, p.patient_code,
             sf.full_name AS doctor_name, st.name AS session_type_name,
-            b.name AS branch_name, COUNT(*) OVER() AS total_count
+            st.form_id,
+            b.name AS branch_name, COUNT(*) OVER() AS total_count,
+            (SELECT COUNT(*) FROM session_form_responses sfr WHERE sfr.session_id = s.id) AS form_response_count
      FROM sessions s
      JOIN patients p      ON p.id = s.patient_id
      JOIN doctors d       ON d.id = s.doctor_id

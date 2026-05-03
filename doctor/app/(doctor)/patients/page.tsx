@@ -50,7 +50,8 @@ export default function PatientsPage() {
                 limit: String(PAGE_SIZE),
                 offset: String((page - 1) * PAGE_SIZE),
             };
-            // filter to own branch if available
+            // filter to own patients (sessions with this doctor)
+            if (user?.doctor_id) params.doctor_id = user.doctor_id;
             if (user?.branch_id) params.branch_id = user.branch_id;
             if (search) params.search = search;
             const d = await patientsApi.list(params);
@@ -59,7 +60,7 @@ export default function PatientsPage() {
         } catch {
             setError("Failed to load patients.");
         } finally { setLoading(false); }
-    }, [user?.branch_id, search, page]);
+    }, [user?.doctor_id, user?.branch_id, search, page]);
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => { setPage(1); }, [search]);

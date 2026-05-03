@@ -231,28 +231,6 @@ function SessionsTab({ patientId }: { patientId: string }) {
         </div>
     );
 }
-                                            {s.status.replace(/-/g, " ")}
-                                        </Badge>
-                                    </div>
-                                    <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
-                                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />
-                                            {dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                                        </span>
-                                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />
-                                            {dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                                        </span>
-                                        <span>{s.duration_minutes} min</span>
-                                        <span className="text-muted-foreground/70">· {s.branch}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </>
-            )}
-        </div>
-    );
-}
 
 // ── Timeline tab ───────────────────────────────────────────────────────────────
 

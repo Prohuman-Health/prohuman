@@ -38,6 +38,7 @@ export interface Session {
     session_type: string;
     session_type_id?: string;
     form_id?: string | null;
+    form_response_count?: number;
     branch_name: string;
     branch_id?: string;
     pre_session_notes?: string | null;

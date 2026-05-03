@@ -26,6 +26,18 @@ export interface Doctor {
     id: string; staff_id: string; full_name: string; email: string;
     phone: string | null; specialty: string | null; bio: string | null; is_active: boolean;
     branch_id: string | null;
+    on_leave?: boolean;
+    leave_from?: string | null;
+    leave_to?: string | null;
+}
+
+export interface DoctorLeavePeriod {
+    id: string;
+    doctor_id: string;
+    from_date: string;
+    to_date: string;
+    reason: string | null;
+    created_at: string;
 }
 
 export interface DoctorAvailabilitySlot {
@@ -55,4 +67,6 @@ export const doctorsApi = {
         request<null>(`/doctors/${id}/availability/${slotId}`, { method: "DELETE" }),
     setAvailability: (id: string, slots: Omit<DoctorAvailabilitySlot, "id" | "doctor_id">[]) =>
         request<DoctorAvailabilitySlot[]>(`/doctors/${id}/availability`, { method: "PUT", body: JSON.stringify(slots) }),
+    listLeave: (id: string) =>
+        request<DoctorLeavePeriod[]>(`/doctors/${id}/leave-periods`),
 };

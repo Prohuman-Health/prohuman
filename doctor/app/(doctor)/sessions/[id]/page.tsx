@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
     ArrowLeft, User, Stethoscope, Clock, MapPin, CalendarDays,
     FileText, CheckCircle2, XCircle, UserX, Loader2, AlertTriangle,
-    RefreshCw, ClipboardList,
+    RefreshCw, ClipboardList, Save, Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -108,6 +108,9 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [answers, setAnswers] = useState<Record<string, SessionFormAnswer>>({});
+    // Track whether answers have changed since last save (for autosave)
+    const isDirtyRef = useRef(false);
+    const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true); setError(null);
@@ -124,33 +127,54 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
                 };
             }
             setAnswers(pre);
+            isDirtyRef.current = false;
         } catch { setError("Failed to load form."); }
         finally { setLoading(false); }
     }, [sessionId]);
 
     useEffect(() => { load(); }, [load]);
 
+    // Autosave: 1.5s after last change
+    useEffect(() => {
+        if (!isDirtyRef.current || readonly || !data?.form_id) return;
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(() => { doSave(false); }, 1500);
+        return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [answers]);
+
     function setAnswer(qid: string, patch: Partial<SessionFormAnswer>) {
+        isDirtyRef.current = true;
         setAnswers(prev => ({ ...prev, [qid]: { ...prev[qid], question_id: qid, ...patch } }));
     }
 
-    async function submit() {
-        if (!data?.questions?.length) return;
-        setSaving(true); setError(null);
+    async function doSave(explicit = true) {
+        if (!data?.questions?.length || saving) return;
+        setSaving(true); setError(null); isDirtyRef.current = false;
         try {
             const payload = Object.values(answers).filter(a => a.question_id);
-            if ((data.responses.length ?? 0) > 0) await sessionsApi.updateForm(sessionId, payload);
+            const hasResponses = (data.responses.length ?? 0) > 0 || !explicit; // treat autosave as update if there's anything
+            if (hasResponses) await sessionsApi.updateForm(sessionId, payload);
             else await sessionsApi.submitForm(sessionId, payload);
-            setSaved(true); setTimeout(() => setSaved(false), 2500);
-            await load();
-        } catch (e) { setError(e instanceof Error ? e.message : "Failed to save."); }
+            setSaved(true); setTimeout(() => setSaved(false), 2000);
+            // Refresh to get server-confirmed responses
+            const d = await sessionsApi.getForm(sessionId);
+            setData(d);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to save.");
+            isDirtyRef.current = true; // allow retry
+        }
         finally { setSaving(false); }
     }
 
-    if (loading) return <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>;
+    if (loading) return (
+        <div className="space-y-4 p-1">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+        </div>
+    );
 
     if (!data?.form_id) return (
-        <div className="flex flex-col items-center gap-3 py-12 text-center text-gray-400">
+        <div className="flex flex-col items-center gap-3 py-16 text-center text-gray-400">
             <FileText className="w-10 h-10 opacity-30" />
             <div>
                 <p className="text-sm font-medium text-gray-600">No form linked</p>
@@ -159,83 +183,152 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
         </div>
     );
 
-    if (!data.questions.length) return <p className="text-sm text-gray-400 py-8 text-center">The linked form has no questions yet.</p>;
+    if (!data.questions.length) return (
+        <p className="text-sm text-gray-400 py-10 text-center">The linked form has no questions yet.</p>
+    );
 
     const hasExisting = data.responses.length > 0;
 
+    // Progress calculation
+    const answered = data.questions.filter(q => {
+        const a = answers[q.id];
+        if (!a) return false;
+        if (q.answer_type === "scale") return a.answer_value != null;
+        if (q.answer_type === "multiple_choice") return (a.answer_options?.length ?? 0) > 0;
+        if (q.answer_type === "drawing_pad") return !!a.answer_text;
+        return !!a.answer_text?.trim();
+    }).length;
+    const total = data.questions.length;
+    const pct = Math.round((answered / total) * 100);
+
     return (
         <div className="space-y-5">
+            {/* Progress bar */}
+            {!readonly && (
+                <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-gray-700">{answered} / {total} answered</span>
+                        {saving && (
+                            <span className="flex items-center gap-1 text-gray-400">
+                                <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                            </span>
+                        )}
+                        {saved && !saving && (
+                            <span className="flex items-center gap-1 text-emerald-600">
+                                <CheckCircle2 className="w-3 h-3" /> Saved
+                            </span>
+                        )}
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                            className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                pct === 100 ? "bg-emerald-500" : "bg-[#2493A2]"
+                            )}
+                            style={{ width: `${pct}%` }}
+                        />
+                    </div>
+                </div>
+            )}
+
             {error && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 text-xs text-red-600">
                     <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
                 </div>
             )}
-            {saved && (
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5 text-xs text-emerald-700">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" /> Saved!
-                </div>
-            )}
-            {hasExisting && !readonly && (
+
+            {hasExisting && readonly && (
                 <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 text-xs text-blue-600">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" /> Responses already submitted — update below.
+                    <CheckCircle2 className="w-4 h-4 shrink-0" /> Form has been submitted for this session.
                 </div>
             )}
 
+            {/* Questions */}
             {data.questions.map((q, i) => {
                 const ans = answers[q.id] ?? { question_id: q.id };
-                return (
-                    <div key={q.id} className="space-y-2">
-                        <label className="text-sm font-semibold flex items-center gap-1">
-                            <span className="text-gray-400 font-normal">{i + 1}.</span> {q.text}
-                            {q.is_required && <span className="text-red-500">*</span>}
-                        </label>
+                const isAnswered = (() => {
+                    if (q.answer_type === "scale") return ans.answer_value != null;
+                    if (q.answer_type === "multiple_choice") return (ans.answer_options?.length ?? 0) > 0;
+                    if (q.answer_type === "drawing_pad") return !!ans.answer_text;
+                    return !!ans.answer_text?.trim();
+                })();
 
+                return (
+                    <div key={q.id} className={cn(
+                        "rounded-2xl border p-4 space-y-3 transition-colors",
+                        !readonly && isAnswered ? "border-[#2493A2]/20 bg-[#2493A2]/[0.02]" : "border-gray-100 bg-white"
+                    )}>
+                        <div className="flex items-start gap-2.5">
+                            <span className="shrink-0 w-6 h-6 rounded-lg bg-gray-100 text-[10px] font-bold text-gray-400 flex items-center justify-center mt-0.5">
+                                {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 leading-snug">
+                                    {q.text}
+                                    {q.is_required && <span className="text-red-500 ml-0.5">*</span>}
+                                </p>
+                                {!readonly && isAnswered && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] text-[#2493A2] font-medium mt-0.5">
+                                        <CheckCircle2 className="w-2.5 h-2.5" /> Answered
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Free text */}
                         {q.answer_type === "free_text" && (
                             readonly
-                                ? <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm min-h-[40px]">{ans.answer_text || <span className="text-gray-400 italic">No answer</span>}</div>
-                                : <textarea rows={2} value={ans.answer_text ?? ""}
+                                ? <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm min-h-[40px] text-gray-800 whitespace-pre-wrap">
+                                    {ans.answer_text || <span className="text-gray-400 italic">No answer</span>}
+                                  </div>
+                                : <textarea rows={3} value={ans.answer_text ?? ""}
                                     onChange={e => setAnswer(q.id, { answer_text: e.target.value })}
-                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm resize-none outline-none focus:ring-2 focus:ring-[#2493A2]/30 focus:border-[#2493A2]"
+                                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm resize-none outline-none focus:ring-2 focus:ring-[#2493A2]/30 focus:border-[#2493A2] transition-colors"
                                     placeholder="Type answer…" />
                         )}
 
-                        {q.answer_type === "drawing_pad" && (
-                            <DrawingPad value={ans.answer_text ?? ""} onChange={readonly ? undefined : v => setAnswer(q.id, { answer_text: v })} readonly={readonly} />
-                        )}
-
+                        {/* Yes / No */}
                         {q.answer_type === "yes_no" && (
                             readonly
-                                ? <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm">{ans.answer_text || <span className="text-gray-400 italic">No answer</span>}</div>
+                                ? <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-800">
+                                    {ans.answer_text || <span className="text-gray-400 italic">No answer</span>}
+                                  </div>
                                 : <div className="flex gap-3">
                                     {["Yes", "No"].map(opt => (
                                         <button key={opt} type="button" onClick={() => setAnswer(q.id, { answer_text: opt })}
-                                            className={cn("px-5 py-2 rounded-xl border text-sm font-medium transition-all",
+                                            className={cn(
+                                                "px-6 py-2.5 rounded-xl border text-sm font-semibold transition-all",
                                                 ans.answer_text === opt
-                                                    ? "bg-[#2493A2] text-white border-[#2493A2]"
-                                                    : "bg-white text-gray-500 border-gray-200 hover:border-[#2493A2]/40")}>
+                                                    ? opt === "Yes"
+                                                        ? "bg-emerald-500 text-white border-emerald-500"
+                                                        : "bg-red-500 text-white border-red-500"
+                                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                                            )}>
                                             {opt}
                                         </button>
                                     ))}
                                   </div>
                         )}
 
+                        {/* Scale */}
                         {q.answer_type === "scale" && (
                             readonly
-                                ? <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm">
+                                ? <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-800">
                                     {ans.answer_value != null
-                                        ? <><span className="font-bold text-lg">{ans.answer_value}</span><span className="text-gray-400 text-xs ml-1">/ {q.scale_max ?? 10}</span></>
+                                        ? <><span className="font-bold text-xl text-gray-900">{ans.answer_value}</span><span className="text-gray-400 text-xs ml-1.5">/ {q.scale_max ?? 10}</span></>
                                         : <span className="text-gray-400 italic">No answer</span>}
                                   </div>
-                                : <div className="space-y-1">
-                                    <div className="flex flex-wrap gap-1">
+                                : <div className="space-y-2">
+                                    <div className="flex flex-wrap gap-1.5">
                                         {Array.from({ length: (q.scale_max ?? 10) - (q.scale_min ?? 0) + 1 }).map((_, n) => {
                                             const val = (q.scale_min ?? 0) + n;
+                                            const sel = ans.answer_value === val;
                                             return (
                                                 <button key={n} type="button" onClick={() => setAnswer(q.id, { answer_value: val })}
-                                                    className={cn("w-9 h-9 rounded-xl border text-sm font-medium transition-all",
-                                                        ans.answer_value === val
-                                                            ? "bg-[#2493A2] text-white border-[#2493A2]"
-                                                            : "bg-white text-gray-500 border-gray-200 hover:border-[#2493A2]/40")}>
+                                                    className={cn(
+                                                        "w-10 h-10 rounded-xl border text-sm font-bold transition-all",
+                                                        sel ? "bg-[#2493A2] text-white border-[#2493A2] scale-110 shadow-sm" : "bg-white text-gray-600 border-gray-200 hover:border-[#2493A2]/50"
+                                                    )}>
                                                     {val}
                                                 </button>
                                             );
@@ -247,11 +340,13 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
                                   </div>
                         )}
 
+                        {/* Multiple choice */}
                         {q.answer_type === "multiple_choice" && q.options && (
                             readonly
                                 ? <div className="flex flex-wrap gap-2">
                                     {q.options.map(opt => (
-                                        <span key={opt} className={cn("px-3 py-1 rounded-xl border text-xs font-medium",
+                                        <span key={opt} className={cn(
+                                            "px-3 py-1 rounded-xl border text-xs font-medium",
                                             (ans.answer_options ?? []).includes(opt)
                                                 ? "bg-[#2493A2]/10 border-[#2493A2]/30 text-[#2493A2]"
                                                 : "bg-gray-50 border-gray-200 text-gray-400")}>
@@ -259,7 +354,7 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
                                         </span>
                                     ))}
                                   </div>
-                                : <div className="space-y-1.5">
+                                : <div className="space-y-2">
                                     {q.options.map(opt => {
                                         const sel = (ans.answer_options ?? []).includes(opt);
                                         return (
@@ -269,10 +364,14 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
                                                         ? (ans.answer_options ?? []).filter(o => o !== opt)
                                                         : [...(ans.answer_options ?? []), opt],
                                                 })}
-                                                className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-sm text-left transition-all",
-                                                    sel ? "bg-[#2493A2]/5 border-[#2493A2]/30 font-medium text-gray-900" : "bg-white border-gray-200 text-gray-500 hover:border-[#2493A2]/30")}>
-                                                <div className={cn("w-4 h-4 rounded border shrink-0 flex items-center justify-center",
-                                                    sel ? "bg-[#2493A2] border-[#2493A2]" : "border-gray-300")}>
+                                                className={cn(
+                                                    "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-sm text-left transition-all",
+                                                    sel ? "bg-[#2493A2]/5 border-[#2493A2]/40 text-gray-900" : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                                                )}>
+                                                <div className={cn(
+                                                    "w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors",
+                                                    sel ? "bg-[#2493A2] border-[#2493A2]" : "border-gray-300"
+                                                )}>
                                                     {sel && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
                                                 </div>
                                                 {opt}
@@ -281,20 +380,57 @@ function SessionFormPanel({ sessionId, readonly }: { sessionId: string; readonly
                                     })}
                                   </div>
                         )}
+
+                        {/* Drawing pad */}
+                        {q.answer_type === "drawing_pad" && (
+                            <DrawingPad
+                                value={ans.answer_text ?? ""}
+                                onChange={readonly ? undefined : v => setAnswer(q.id, { answer_text: v })}
+                                readonly={readonly}
+                            />
+                        )}
+
+                        {/* File upload — not supported in portal, show note */}
+                        {q.answer_type === "file_upload" && (
+                            readonly
+                                ? <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-500">
+                                    <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                                    {ans.answer_text
+                                        ? <a href={ans.answer_text} target="_blank" rel="noopener noreferrer" className="text-[#2493A2] underline text-xs truncate">{ans.answer_text}</a>
+                                        : <span className="text-gray-400 italic text-xs">No file submitted</span>}
+                                  </div>
+                                : <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 text-xs text-amber-600">
+                                    <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                                    File uploads are handled from the admin / front-desk portal.
+                                  </div>
+                        )}
                     </div>
                 );
             })}
 
+            {/* Save button — only shown when not autosaving and there are changes, or as explicit submit */}
             {!readonly && (
-                <div className="pt-2 flex justify-end">
-                    <button onClick={submit} disabled={saving || saved}
-                        className={cn(
-                            "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                            "bg-[#2493A2] text-white hover:bg-[#1d7a87] disabled:opacity-60"
-                        )}>
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : null}
-                        {hasExisting ? "Update Responses" : "Submit Form"}
-                    </button>
+                <div className="sticky bottom-0 pt-2 pb-1 bg-white/90 backdrop-blur-sm border-t border-gray-100 -mx-5 px-5 mt-2">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] text-gray-400">
+                            {answered === total && total > 0 ? "All questions answered ✓" : `${total - answered} question${total - answered !== 1 ? "s" : ""} remaining`}
+                        </p>
+                        <button
+                            onClick={() => doSave(true)}
+                            disabled={saving || saved}
+                            className={cn(
+                                "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                                saved
+                                    ? "bg-emerald-500 text-white"
+                                    : "bg-[#2493A2] text-white hover:bg-[#1d7a87] disabled:opacity-60"
+                            )}>
+                            {saving
+                                ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</>
+                                : saved
+                                ? <><CheckCircle2 className="w-4 h-4" />Saved!</>
+                                : <><Save className="w-4 h-4" />{hasExisting ? "Update" : "Submit"}</>}
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
@@ -381,6 +517,8 @@ export default function SessionDetailPage() {
     const dt = new Date(session.scheduled_at);
     const TERMINAL = new Set(["completed", "cancelled", "no-show", "late-cancellation"]);
     const isTerminal = TERMINAL.has(session.status);
+    // Doctors can still fill/update forms on completed sessions
+    const isFormReadonly = new Set(["cancelled", "no-show", "late-cancellation"]).has(session.status);
 
     return (
         <div className="flex flex-col h-full overflow-hidden gap-4 p-4 md:p-5">
@@ -472,7 +610,7 @@ export default function SessionDetailPage() {
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-5">
-                        <SessionFormPanel sessionId={id} readonly={isTerminal} />
+                        <SessionFormPanel sessionId={id} readonly={isFormReadonly} />
                     </div>
                 </div>
             </div>
