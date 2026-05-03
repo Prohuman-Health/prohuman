@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
     CalendarDays, Clock, CheckCircle2, XCircle, AlertTriangle,
-    RefreshCw, ChevronRight, ChevronLeft, User, Stethoscope,
+    RefreshCw, ChevronRight, User, Stethoscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sessionsApi, Session } from "@/lib/api";
@@ -41,17 +41,11 @@ function monthRange(dateStr: string): { start: string; end: string; label: strin
     return { start, end, label };
 }
 
-function fmt(dateStr: string) {
-    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
 
 function formatTime(iso: string) {
     return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
-function initials(name: string) {
-    return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-}
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<string, string> = {
@@ -166,12 +160,6 @@ export default function DashboardPage() {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError]           = useState<string | null>(null);
 
-    // The date range currently loaded
-    const [loadedRange, setLoadedRange] = useState<{ from: string; to: string }>(() => {
-        const d = today();
-        return { from: d, to: d };
-    });
-
     // ── Fetch ─────────────────────────────────────────────────────────────────
     const loadSessions = useCallback(async (from: string, to: string, silent = false) => {
         const doctorId = user?.doctor_id;
@@ -187,7 +175,6 @@ export default function DashboardPage() {
                 const data = await sessionsApi.list({ doctor_id: doctorId, from, to });
                 setSessions(data.sessions);
             }
-            setLoadedRange({ from, to });
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Failed to load sessions");
         } finally {
@@ -236,44 +223,20 @@ export default function DashboardPage() {
     const daySessions = viewMode === "day" ? sessions : (sessionsByDate[selectedDate] ?? []);
 
     // ── Navigation ────────────────────────────────────────────────────────────
-    function navigate(dir: 1 | -1) {
-        if (viewMode === "day")   setSelectedDate(prev => addDays(prev, dir));
-        if (viewMode === "week")  setSelectedDate(prev => addDays(prev, dir * 7));
-        if (viewMode === "month") {
-            const d = new Date(selectedDate + "T00:00:00");
-            d.setMonth(d.getMonth() + dir);
-            setSelectedDate(d.toISOString().slice(0, 10));
-        }
-    }
-
-    // ── Range label ───────────────────────────────────────────────────────────
-    const rangeLabel = useMemo(() => {
-        if (viewMode === "day") {
-            const isToday = selectedDate === today();
-            return isToday ? "Today" : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
-                weekday: "long", day: "numeric", month: "long",
-            });
-        }
-        if (viewMode === "week") {
-            const { start, end } = weekRange(selectedDate);
-            return `${fmt(start)} – ${fmt(end)}`;
-        }
-        return monthRange(selectedDate).label;
-    }, [viewMode, selectedDate]);
-
+    // (navigation removed — view toggles between Day/Week/Month on the same date)
     const isToday = selectedDate === today();
 
     return (
         <div className="p-4 md:p-6 space-y-5 max-w-3xl mx-auto">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-start justify-between gap-3">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">
-                        {rangeLabel}
+                        {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
                     </h1>
                     <p className="text-sm text-gray-500 mt-0.5">
-                        Welcome back, {user?.full_name?.split(" ")[0]}
+                        {user?.full_name}
                         {user?.specialty ? ` · ${user.specialty}` : ""}
                     </p>
                 </div>
@@ -286,40 +249,19 @@ export default function DashboardPage() {
                 </button>
             </div>
 
-            {/* ── View toggle + nav ────────────────────────────────────────── */}
-            <div className="flex items-center gap-2 flex-wrap">
-                {/* Day / Week / Month toggle */}
-                <div className="flex items-center gap-0.5 bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
-                    {(["day", "week", "month"] as ViewMode[]).map(v => (
-                        <button key={v} onClick={() => setViewMode(v)}
-                            className={cn(
-                                "px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
-                                viewMode === v
-                                    ? "bg-[#2493A2] text-white shadow-sm"
-                                    : "text-gray-500 hover:text-gray-800"
-                            )}>
-                            {v}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Prev / Today / Next */}
-                <div className="flex items-center gap-1">
-                    <button onClick={() => navigate(-1)}
-                        className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors">
-                        <ChevronLeft className="w-4 h-4" />
+            {/* ── View toggle ──────────────────────────────────────────────── */}
+            <div className="flex items-center gap-0.5 bg-white rounded-xl p-1 border border-gray-200 shadow-sm w-fit">
+                {(["day", "week", "month"] as ViewMode[]).map(v => (
+                    <button key={v} onClick={() => setViewMode(v)}
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
+                            viewMode === v
+                                ? "bg-[#2493A2] text-white shadow-sm"
+                                : "text-gray-500 hover:text-gray-800"
+                        )}>
+                        {v}
                     </button>
-                    {!isToday && (
-                        <button onClick={() => setSelectedDate(today())}
-                            className="h-8 px-3 rounded-xl border border-gray-200 text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors">
-                            Today
-                        </button>
-                    )}
-                    <button onClick={() => navigate(1)}
-                        className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors">
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-                </div>
+                ))}
             </div>
 
             {/* ── Week strip (week view) ───────────────────────────────────── */}
