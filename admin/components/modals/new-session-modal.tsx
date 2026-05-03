@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Loader2, CalendarDays, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,7 +163,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
 
     const needsBranchPicker = !user?.branch_id;
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={reset} />
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -301,7 +302,8 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
