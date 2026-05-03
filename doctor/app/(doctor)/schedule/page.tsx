@@ -30,9 +30,10 @@ function addDays(dateStr: string, days: number): string {
 
 function weekRange(dateStr: string): { start: string; end: string } {
     const d = new Date(dateStr + "T00:00:00");
-    const day = d.getDay(); // 0=Sun
+    const day = d.getDay(); // 0=Sun, 1=Mon, …
+    // Shift so week starts on Monday: Mon=0 offset, Sun=6 offset
     const start = new Date(d);
-    start.setDate(d.getDate() - day);
+    start.setDate(d.getDate() - ((day + 6) % 7));
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
     return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
     CalendarDays, Clock, CheckCircle2, XCircle, AlertTriangle,
-    RefreshCw, ChevronRight, User, Stethoscope,
+    RefreshCw, ChevronRight, ChevronLeft, User, Stethoscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sessionsApi, Session } from "@/lib/api";
@@ -15,12 +15,38 @@ function today(): string {
     return new Date().toISOString().slice(0, 10);
 }
 
-function formatTime(iso: string) {
-    return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+function addDays(dateStr: string, days: number): string {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
 }
 
-function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+/** Week Mon–Sun containing dateStr */
+function weekRange(dateStr: string): { start: string; end: string } {
+    const d = new Date(dateStr + "T00:00:00");
+    const start = new Date(d);
+    start.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+function monthRange(dateStr: string): { start: string; end: string; label: string } {
+    const d = new Date(dateStr + "T00:00:00");
+    const y = d.getFullYear(), m = d.getMonth();
+    const start = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const last  = new Date(y, m + 1, 0).getDate();
+    const end   = `${y}-${String(m + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+    return { start, end, label };
+}
+
+function fmt(dateStr: string) {
+    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function formatTime(iso: string) {
+    return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
 function initials(name: string) {
@@ -128,38 +154,111 @@ function SessionCard({ session }: { session: Session }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
+type ViewMode = "day" | "week" | "month";
+
 export default function DashboardPage() {
     const { user } = useAuth();
-    const [sessions, setSessions] = useState<Session[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshing, setRefreshing] = useState(false);
-    const [selectedDate, setSelectedDate] = useState(today());
 
-    const loadSchedule = useCallback(async (date: string, silent = false) => {
-        if (!silent) setLoading(true);
-        else setRefreshing(true);
+    const [viewMode, setViewMode]     = useState<ViewMode>("day");
+    const [selectedDate, setSelectedDate] = useState(today());
+    const [sessions, setSessions]     = useState<Session[]>([]);
+    const [loading, setLoading]       = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError]           = useState<string | null>(null);
+
+    // The date range currently loaded
+    const [loadedRange, setLoadedRange] = useState<{ from: string; to: string }>(() => {
+        const d = today();
+        return { from: d, to: d };
+    });
+
+    // ── Fetch ─────────────────────────────────────────────────────────────────
+    const loadSessions = useCallback(async (from: string, to: string, silent = false) => {
+        const doctorId = user?.doctor_id;
+        if (!doctorId) return;
+        if (!silent) setLoading(true); else setRefreshing(true);
         setError(null);
         try {
-            const data = await sessionsApi.mySchedule(date);
-            setSessions(data);
+            if (from === to) {
+                // single day — use mySchedule (more accurate for the doctor's own schedule)
+                const data = await sessionsApi.mySchedule(from);
+                setSessions(data);
+            } else {
+                const data = await sessionsApi.list({ doctor_id: doctorId, from, to });
+                setSessions(data.sessions);
+            }
+            setLoadedRange({ from, to });
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : "Failed to load schedule");
+            setError(e instanceof Error ? e.message : "Failed to load sessions");
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [user?.doctor_id]);
+
+    // Range for the current view
+    const range = useMemo(() => {
+        if (viewMode === "day")   return { from: selectedDate, to: selectedDate };
+        if (viewMode === "week")  return weekRange(selectedDate);
+        return monthRange(selectedDate);
+    }, [viewMode, selectedDate]);
 
     useEffect(() => {
-        loadSchedule(selectedDate);
-    }, [selectedDate, loadSchedule]);
+        loadSessions(range.from, range.to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range.from, range.to]);
 
-    // ── Computed stats ────────────────────────────────────────────────────────
+    // ── Computed stats (always on sessions in range) ──────────────────────────
     const total     = sessions.length;
     const completed = sessions.filter(s => s.status === "completed").length;
     const upcoming  = sessions.filter(s => s.status === "pending" || s.status === "scheduled").length;
     const noShows   = sessions.filter(s => s.status === "no_show").length;
+
+    // Week / month: sessions grouped by date
+    const sessionsByDate = useMemo(() => {
+        const map: Record<string, Session[]> = {};
+        sessions.forEach(s => {
+            const k = s.scheduled_at.slice(0, 10);
+            if (!map[k]) map[k] = [];
+            map[k].push(s);
+        });
+        return map;
+    }, [sessions]);
+
+    // Week dates Mon–Sun
+    const weekDates = useMemo(() => {
+        const { start } = weekRange(selectedDate);
+        return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+    }, [selectedDate]);
+
+    // Day view: sessions for the selected day
+    const daySessions = viewMode === "day" ? sessions : (sessionsByDate[selectedDate] ?? []);
+
+    // ── Navigation ────────────────────────────────────────────────────────────
+    function navigate(dir: 1 | -1) {
+        if (viewMode === "day")   setSelectedDate(prev => addDays(prev, dir));
+        if (viewMode === "week")  setSelectedDate(prev => addDays(prev, dir * 7));
+        if (viewMode === "month") {
+            const d = new Date(selectedDate + "T00:00:00");
+            d.setMonth(d.getMonth() + dir);
+            setSelectedDate(d.toISOString().slice(0, 10));
+        }
+    }
+
+    // ── Range label ───────────────────────────────────────────────────────────
+    const rangeLabel = useMemo(() => {
+        if (viewMode === "day") {
+            const isToday = selectedDate === today();
+            return isToday ? "Today" : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
+                weekday: "long", day: "numeric", month: "long",
+            });
+        }
+        if (viewMode === "week") {
+            const { start, end } = weekRange(selectedDate);
+            return `${fmt(start)} – ${fmt(end)}`;
+        }
+        return monthRange(selectedDate).label;
+    }, [viewMode, selectedDate]);
 
     const isToday = selectedDate === today();
 
@@ -167,53 +266,94 @@ export default function DashboardPage() {
         <div className="p-4 md:p-6 space-y-5 max-w-3xl mx-auto">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">
-                        {isToday ? "Today" : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
-                            weekday: "long", day: "numeric", month: "long",
-                        })}
+                        {rangeLabel}
                     </h1>
                     <p className="text-sm text-gray-500 mt-0.5">
                         Welcome back, {user?.full_name?.split(" ")[0]}
                         {user?.specialty ? ` · ${user.specialty}` : ""}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <button
-                        onClick={() => loadSchedule(selectedDate, true)}
-                        disabled={refreshing}
-                        className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors"
-                    >
-                        <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+                <button
+                    onClick={() => loadSessions(range.from, range.to, true)}
+                    disabled={refreshing}
+                    className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors"
+                >
+                    <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+                </button>
+            </div>
+
+            {/* ── View toggle + nav ────────────────────────────────────────── */}
+            <div className="flex items-center gap-2 flex-wrap">
+                {/* Day / Week / Month toggle */}
+                <div className="flex items-center gap-0.5 bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
+                    {(["day", "week", "month"] as ViewMode[]).map(v => (
+                        <button key={v} onClick={() => setViewMode(v)}
+                            className={cn(
+                                "px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
+                                viewMode === v
+                                    ? "bg-[#2493A2] text-white shadow-sm"
+                                    : "text-gray-500 hover:text-gray-800"
+                            )}>
+                            {v}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Prev / Today / Next */}
+                <div className="flex items-center gap-1">
+                    <button onClick={() => navigate(-1)}
+                        className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors">
+                        <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <Link
-                        href="/schedule"
-                        className="h-9 px-4 rounded-xl bg-[#2493A2] text-white text-sm font-medium flex items-center gap-1.5 hover:bg-[#1d7a87] transition-colors"
-                    >
-                        <CalendarDays className="w-4 h-4" />
-                        <span className="hidden sm:inline">Schedule</span>
-                    </Link>
+                    {!isToday && (
+                        <button onClick={() => setSelectedDate(today())}
+                            className="h-8 px-3 rounded-xl border border-gray-200 text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+                            Today
+                        </button>
+                    )}
+                    <button onClick={() => navigate(1)}
+                        className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors">
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
 
-            {/* ── Date picker ─────────────────────────────────────────────── */}
-            <div className="flex items-center gap-2">
-                <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={e => setSelectedDate(e.target.value)}
-                    className="h-9 px-3 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-[#2493A2] focus:ring-1 focus:ring-[#2493A2]/30 transition-all bg-white"
-                />
-                {!isToday && (
-                    <button
-                        onClick={() => setSelectedDate(today())}
-                        className="h-9 px-3 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition-colors bg-white"
-                    >
-                        Today
-                    </button>
-                )}
-            </div>
+            {/* ── Week strip (week view) ───────────────────────────────────── */}
+            {viewMode === "week" && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3">
+                    <div className="flex gap-1 overflow-x-auto">
+                        {weekDates.map(date => {
+                            const count = sessionsByDate[date]?.length ?? 0;
+                            const isDayToday = date === today();
+                            const isSelected = date === selectedDate;
+                            const d = new Date(date + "T00:00:00");
+                            return (
+                                <button key={date} onClick={() => setSelectedDate(date)}
+                                    className={cn(
+                                        "flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl flex-1 min-w-[44px] transition-all",
+                                        isSelected
+                                            ? "bg-[#2493A2] text-white shadow-sm"
+                                            : isDayToday
+                                            ? "bg-[#2493A2]/10 text-[#2493A2]"
+                                            : "hover:bg-gray-100 text-gray-600"
+                                    )}>
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider opacity-75">
+                                        {d.toLocaleDateString("en-IN", { weekday: "short" })}
+                                    </span>
+                                    <span className="text-lg font-bold leading-none">{d.getDate()}</span>
+                                    {count > 0
+                                        ? <span className={cn("text-[10px] font-semibold", isSelected ? "text-white/80" : "text-[#2493A2]")}>{count}</span>
+                                        : <span className="h-3.5" />
+                                    }
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* ── Stats ───────────────────────────────────────────────────── */}
             {loading ? (
@@ -222,7 +362,7 @@ export default function DashboardPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <StatCard label="Total Sessions" value={total} icon={CalendarDays}
+                    <StatCard label="Total" value={total} icon={CalendarDays}
                         color="bg-blue-50 text-blue-600" />
                     <StatCard label="Upcoming" value={upcoming} icon={Clock}
                         color="bg-amber-50 text-amber-600" />
@@ -244,8 +384,10 @@ export default function DashboardPage() {
             <div>
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-widest">
-                        {isToday ? "Today&apos;s Sessions" : "Sessions"}
-                        {!loading && <span className="ml-2 text-gray-400 font-normal normal-case tracking-normal">{total} total</span>}
+                        {viewMode === "day" && (isToday ? "Today's Sessions" : "Sessions")}
+                        {viewMode === "week" && `${new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long" })}'s Sessions`}
+                        {viewMode === "month" && "All Sessions"}
+                        {!loading && <span className="ml-2 text-gray-400 font-normal normal-case tracking-normal">{viewMode === "day" ? daySessions.length : total} total</span>}
                     </h2>
                     <Link href="/schedule" className="text-xs text-[#2493A2] hover:underline flex items-center gap-0.5">
                         View all <ChevronRight className="w-3 h-3" />
@@ -256,24 +398,50 @@ export default function DashboardPage() {
                     <div className="space-y-3">
                         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
                     </div>
-                ) : sessions.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-                            <User className="w-7 h-7 text-gray-300" />
+                ) : viewMode === "month" ? (
+                    // Month: group by day
+                    Object.keys(sessionsByDate).length === 0 ? (
+                        <EmptyState message="No sessions this month." />
+                    ) : (
+                        <div className="space-y-4">
+                            {Object.entries(sessionsByDate)
+                                .sort(([a], [b]) => a.localeCompare(b))
+                                .map(([date, daySess]) => (
+                                    <div key={date}>
+                                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                            {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                                        </p>
+                                        <div className="space-y-2">
+                                            {daySess.map(s => <SessionCard key={s.id} session={s} />)}
+                                        </div>
+                                    </div>
+                                ))}
                         </div>
-                        <p className="text-gray-500 font-medium">No sessions scheduled</p>
-                        <p className="text-sm text-gray-400 mt-1">
-                            {isToday ? "You have no sessions today." : "No sessions on this date."}
-                        </p>
-                    </div>
+                    )
+                ) : daySessions.length === 0 ? (
+                    <EmptyState message={isToday && viewMode === "day" ? "You have no sessions today." : "No sessions on this date."} />
                 ) : (
                     <div className="space-y-2.5">
-                        {sessions.map(session => (
-                            <SessionCard key={session.id} session={session} />
-                        ))}
+                        {daySessions
+                            .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
+                            .map(session => (
+                                <SessionCard key={session.id} session={session} />
+                            ))}
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+function EmptyState({ message }: { message: string }) {
+    return (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                <User className="w-7 h-7 text-gray-300" />
+            </div>
+            <p className="text-gray-500 font-medium">No sessions scheduled</p>
+            <p className="text-sm text-gray-400 mt-1">{message}</p>
         </div>
     );
 }
