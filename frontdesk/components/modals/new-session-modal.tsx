@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/contexts/patients-context";
 import { useSessions } from "@/lib/contexts/sessions-context";
+import { useStaff } from "@/lib/contexts/staff-context";
+import { useCatalog } from "@/lib/contexts/catalog-context";
 import { useAuth } from "@/lib/auth-context";
-import { sessionsApi, calendarApi, Branch, SessionType } from "@/lib/api";
+import { sessionsApi, calendarApi, Branch } from "@/lib/api";
 
 interface Props {
     open: boolean;
@@ -21,6 +23,8 @@ interface Props {
 export function NewSessionModal({ open, onClose, prefill }: Props) {
     const { patients } = usePatients();
     const { refresh } = useSessions();
+    const { doctors } = useStaff();
+    const { sessionTypes } = useCatalog();
     const { user } = useAuth();
 
     const [loading, setLoading] = useState(false);
@@ -29,9 +33,6 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [apiError, setApiError] = useState<string | null>(null);
     const [isClosedDay, setIsClosedDay] = useState(false);
     const [closedReason, setClosedReason] = useState<string | null>(null);
-    const [availableDoctors, setAvailableDoctors] = useState<import("@/lib/api").Doctor[]>([]);
-    const [doctorsLoading, setDoctorsLoading] = useState(false);
-    const [sessionTypes, setSessionTypes] = useState<SessionType[]>([]);
 
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -62,31 +63,23 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         }));
     }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Single API call: all booking modal data in one round trip
+    // Fetch closure status + branches when date/branch changes
     useEffect(() => {
         if (!open || !form.date) return;
-        setDoctorsLoading(true);
-        setBranchesLoading(true);
+        if (!user?.branch_id) setBranchesLoading(true);
         calendarApi.dateInfo(form.date, form.branch_id || undefined)
             .then(info => {
-                setAvailableDoctors(info.available_doctors);
                 setIsClosedDay(info.is_closed);
                 setClosedReason(info.closure_reason);
-                setSessionTypes(info.session_types);
                 if (!user?.branch_id) {
                     setBranches(info.branches);
                     if (info.branches.length === 1) {
                         setForm(prev => ({ ...prev, branch_id: info.branches[0].id }));
                     }
                 }
-                setForm(prev => ({ ...prev, doctor_id: "" }));
             })
-            .catch(() => {
-                setAvailableDoctors([]);
-                setIsClosedDay(false);
-                setClosedReason(null);
-            })
-            .finally(() => { setDoctorsLoading(false); setBranchesLoading(false); });
+            .catch(() => { setIsClosedDay(false); setClosedReason(null); })
+            .finally(() => setBranchesLoading(false));
     }, [open, form.date, form.branch_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const set = (k: keyof typeof form) =>
@@ -221,15 +214,12 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                         </Field>
 
                         <Field label="Doctor" required error={errors.doctor_id}>
-                            <Select value={form.doctor_id} onValueChange={setVal("doctor_id")} disabled={doctorsLoading || !form.date}>
+                            <Select value={form.doctor_id} onValueChange={setVal("doctor_id")}>
                                 <SelectTrigger className={cn("w-full h-10 rounded-xl text-sm", errors.doctor_id && "border-red-400")}>
-                                    <SelectValue placeholder={doctorsLoading ? "Loading…" : !form.date ? "Pick a date first" : "Select doctor…"} />
+                                    <SelectValue placeholder="Select doctor…" />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl">
-                                    {availableDoctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
-                                    {!doctorsLoading && availableDoctors.length === 0 && (
-                                        <div className="px-3 py-2 text-xs text-gray-400 text-center">No available doctors on this date</div>
-                                    )}
+                                    {doctors.map(d => <SelectItem key={d.id} value={d.id} className="rounded-lg">{d.full_name}{d.specialty ? ` — ${d.specialty}` : ""}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </Field>
