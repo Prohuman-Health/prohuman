@@ -85,6 +85,7 @@ export interface Form {
     title: string;
     description: string | null;
     is_published: boolean;
+    is_archived: boolean;
     created_at: string;
     updated_at: string;
     questions?: FormQuestion[];
@@ -99,6 +100,8 @@ export const formsApi = {
         request<Form>(`/forms/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     delete: (id: string) =>
         request<null>(`/forms/${id}`, { method: "DELETE" }),
+    archive: (id: string) =>
+        request<Form>(`/forms/${id}/archive`, { method: "PUT" }),
     publish: (id: string) =>
         request<Form>(`/forms/${id}/publish`, { method: "PUT" }),
     setQuestions: (id: string, questions: { question_id: string; order_index: number; is_required: boolean }[]) =>

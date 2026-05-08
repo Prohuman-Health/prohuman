@@ -23,6 +23,7 @@ router.post(  "/",                  authorize("admin"), validate(formSchema),   
 router.get(   "/:id",               c.getForm);           // includes questions
 router.patch( "/:id",               authorize("admin"), validate(formSchema.partial()), c.updateForm);
 router.delete("/:id",               authorize("admin"), c.deleteForm);
+router.put(   "/:id/archive",       authorize("admin"), c.archiveForm);
 router.put(   "/:id/publish",       authorize("admin"), c.publishForm);
 router.put(   "/:id/questions",     authorize("admin"), validate(formQuestionsSchema),  c.setFormQuestions);  // full replace
 router.patch( "/:id/questions",     authorize("admin"), validate(formQuestionsSchema),  c.addFormQuestions);  // append/update

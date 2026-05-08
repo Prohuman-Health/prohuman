@@ -263,8 +263,9 @@ export default function DoctorsPage() {
                                 {selected.specialty && <p className="text-xs text-muted-foreground mt-0.5">{selected.specialty}</p>}
                             </div>
                             <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium capitalize",
+                                selected.on_leave ? "border-amber-200 text-amber-700 bg-amber-50" :
                                 selected.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-red-200 text-red-600 bg-red-50")}>
-                                {selected.is_active ? "Active" : "Unavailable"}
+                                {selected.on_leave ? "Leave" : selected.is_active ? "Active" : "Unavailable"}
                             </Badge>
                         </div>
 
@@ -508,8 +509,9 @@ export default function DoctorsPage() {
                                             <td className="px-5 py-4 text-center font-semibold text-sm">{sessionCount}</td>
                                             <td className="px-5 py-4">
                                                 <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium",
+                                                    d.on_leave ? "border-amber-200 text-amber-700 bg-amber-50" :
                                                     d.is_active ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-red-200 text-red-600 bg-red-50")}>
-                                                    {d.is_active ? "Active" : "Unavailable"}
+                                                    {d.on_leave ? "Leave" : d.is_active ? "Active" : "Unavailable"}
                                                 </Badge>
                                             </td>
                                         </tr>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
 import {
     Plus, Search, Pencil, Eye, Copy, Trash2, GripVertical, X,
     FileText, Loader2, RefreshCw, AlertCircle, CheckCircle2,
-    Type, ToggleLeft, List, Scale, BookOpen, Paperclip, PenLine,
+    Type, ToggleLeft, List, Scale, BookOpen, Paperclip, PenLine, Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -608,6 +608,9 @@ export default function FormsPage() {
     const [preview, setPreview] = useState<Form | null>(null);
     const [builder, setBuilder] = useState<Form | null | "new">(null);
     const [deleting, setDeleting] = useState<Form | null>(null);
+    const [archiveBlocked, setArchiveBlocked] = useState<Form | null>(null);
+    const [archiving, setArchiving] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -621,8 +624,25 @@ export default function FormsPage() {
     const filtered = forms.filter(f => f.title.toLowerCase().includes(search.toLowerCase()));
 
     async function handleDelete(id: string) {
+        setDeleteError(null);
         try { await formsApi.delete(id); setDeleting(null); load(); }
-        catch (e) { alert(e instanceof Error ? e.message : "Failed to delete"); }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : "Failed to delete";
+            if (msg.toLowerCase().includes("referenced") || msg.toLowerCase().includes("blocked")) {
+                // Form has session responses — offer archive instead
+                setArchiveBlocked(deleting);
+                setDeleting(null);
+            } else {
+                setDeleteError(msg);
+            }
+        }
+    }
+
+    async function handleArchive(id: string) {
+        setArchiving(true);
+        try { await formsApi.archive(id); setArchiveBlocked(null); load(); }
+        catch { /* silently ignore */ }
+        finally { setArchiving(false); }
     }
 
     async function handleDuplicate(f: Form) {
@@ -706,8 +726,9 @@ export default function FormsPage() {
                                 </td>
                                 <td className="px-5 py-4">
                                     <Badge variant="outline" className={cn("text-[10px] rounded-full px-2.5 font-medium",
+                                        f.is_archived ? "border-amber-200 text-amber-700 bg-amber-50" :
                                         f.is_published ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "border-muted-foreground/20 text-muted-foreground")}>
-                                        {f.is_published ? "Published" : "Draft"}
+                                        {f.is_archived ? "Archived" : f.is_published ? "Published" : "Draft"}
                                     </Badge>
                                 </td>
                                 <td className="px-5 py-4">
@@ -726,7 +747,7 @@ export default function FormsPage() {
 
             {deleting && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleting(null)} />
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setDeleting(null); setDeleteError(null); }} />
                     <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center"><AlertCircle className="w-5 h-5 text-red-600" /></div>
@@ -735,9 +756,33 @@ export default function FormsPage() {
                                 <p className="text-xs text-muted-foreground mt-0.5">Permanently removed. Cannot undo.</p>
                             </div>
                         </div>
+                        {deleteError && (
+                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{deleteError}</p>
+                        )}
                         <div className="flex justify-end gap-3">
-                            <Button variant="outline" className="rounded-xl" onClick={() => setDeleting(null)}>Cancel</Button>
+                            <Button variant="outline" className="rounded-xl" onClick={() => { setDeleting(null); setDeleteError(null); }}>Cancel</Button>
                             <Button className="rounded-xl bg-red-600 hover:bg-red-700" onClick={() => handleDelete(deleting.id)}>Delete</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {archiveBlocked && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setArchiveBlocked(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center"><Archive className="w-5 h-5 text-amber-600" /></div>
+                            <div>
+                                <p className="font-bold">Cannot delete this form</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">This form has session responses attached to it. Archive it instead to hide it from the form picker while preserving the data.</p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" className="rounded-xl" onClick={() => setArchiveBlocked(null)}>Cancel</Button>
+                            <Button className="rounded-xl bg-amber-600 hover:bg-amber-700 gap-2" disabled={archiving} onClick={() => handleArchive(archiveBlocked.id)}>
+                                {archiving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}Archive Form
+                            </Button>
                         </div>
                     </div>
                 </div>

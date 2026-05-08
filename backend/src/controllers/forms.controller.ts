@@ -5,7 +5,12 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 
 export const listForms = asyncHandler(async (req: Request, res: Response) => {
-  const result = await query("SELECT * FROM forms ORDER BY title");
+  const showArchived = req.query.archived === "true";
+  const result = await query(
+    showArchived
+      ? "SELECT * FROM forms ORDER BY title"
+      : "SELECT * FROM forms WHERE is_archived = FALSE ORDER BY title"
+  );
   ApiResponse.ok(res, result.rows);
 });
 
@@ -46,6 +51,15 @@ export const deleteForm = asyncHandler(async (req: Request, res: Response) => {
   if (used.rows.length) throw ApiError.conflict("Form is linked to active session types");
   await query("DELETE FROM forms WHERE id = $1", [req.params.id]);
   ApiResponse.noContent(res);
+});
+
+export const archiveForm = asyncHandler(async (req: Request, res: Response) => {
+  const result = await query(
+    "UPDATE forms SET is_archived = TRUE, updated_at = NOW() WHERE id = $1 RETURNING *",
+    [req.params.id]
+  );
+  if (!result.rows[0]) throw ApiError.notFound("Form not found");
+  ApiResponse.ok(res, result.rows[0]);
 });
 
 export const publishForm = asyncHandler(async (req: Request, res: Response) => {
