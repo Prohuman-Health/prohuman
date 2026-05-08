@@ -39,7 +39,7 @@ export const settingsApi = {
 
 // ── Questions (reusable question bank) ────────────────────────────────────────
 // Must match backend Zod enum exactly
-export type QuestionAnswerType = "free_text" | "yes_no" | "scale" | "multiple_choice" | "file_upload" | "drawing_pad";
+export type QuestionAnswerType = "free_text" | "yes_no" | "scale" | "multiple_choice" | "file_upload" | "drawing_pad" | "medical_media" | "body_map";
 
 export interface Question {
     id: string;

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
 import {
     Plus, Search, Pencil, Eye, Copy, Trash2, GripVertical, X,
     FileText, Loader2, RefreshCw, AlertCircle, CheckCircle2,
-    Type, ToggleLeft, List, Scale, BookOpen, Paperclip, PenLine, Archive,
+    Type, ToggleLeft, List, Scale, BookOpen, Paperclip, PenLine, Archive, ScanLine, Crosshair,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ const ANSWER_TYPE_META: Record<QuestionAnswerType, { icon: React.ElementType; la
     multiple_choice: { icon: List, label: "Multiple Choice", hint: "Select from options (min 2 options)" },
     file_upload: { icon: Paperclip, label: "File Upload", hint: "Photos, videos, or documents" },
     drawing_pad: { icon: PenLine, label: "Drawing", hint: "Patient draws using finger or stylus" },
+    medical_media: { icon: ScanLine, label: "Medical Media", hint: "X-rays, MRI scans, movement videos (images & video only)" },
+    body_map: { icon: Crosshair, label: "Body Map", hint: "Mark pain/injury areas on a body diagram" },
 };
 
 const ANSWER_TYPES = Object.keys(ANSWER_TYPE_META) as QuestionAnswerType[];
@@ -156,6 +158,20 @@ function PreviewModal({ formId, title, onClose }: { formId: string; title: strin
                                 {q.answer_type === "file_upload" && (
                                     <div className="h-10 rounded-xl border border-dashed border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center">
                                         Upload photos, videos, or documents
+                                    </div>
+                                )}
+                                {q.answer_type === "medical_media" && (
+                                    <div className="h-10 rounded-xl border border-dashed border-cyan-200 bg-cyan-50/50 px-3 py-2 text-xs text-cyan-700 flex items-center gap-1.5">
+                                        <ScanLine className="w-3.5 h-3.5 shrink-0" />
+                                        Upload X-rays, MRI scans, or movement videos
+                                    </div>
+                                )}
+                                {q.answer_type === "body_map" && (
+                                    <div className="relative rounded-xl border border-dashed border-rose-200 bg-rose-50/30 overflow-hidden">
+                                        <img src="/marker.jpg" alt="Body diagram" className="w-full opacity-60" />
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className="text-xs font-medium text-rose-600 bg-white/80 px-3 py-1 rounded-lg">Mark pain / injury areas</span>
+                                        </div>
                                     </div>
                                 )}
                                 {q.answer_type === "drawing_pad" && (
@@ -465,6 +481,9 @@ function BuilderModal({ form, onClose, onSaved }: { form: Form | null; onClose: 
                                                 )}
                                                 {q.answer_type === "file_upload" && (
                                                     <p className="text-[10px] text-muted-foreground">Patients can upload photos, videos, and documents</p>
+                                                )}
+                                                {q.answer_type === "medical_media" && (
+                                                    <p className="text-[10px] text-cyan-600">Images &amp; videos only · X-rays, MRI scans, movement recordings</p>
                                                 )}
                                                 {q.answer_type === "drawing_pad" && (
                                                     <p className="text-[10px] text-muted-foreground">Patients can sketch directly using tablet touch or stylus</p>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
 import {
     Plus, Search, Pencil, Trash2, X, RefreshCw, AlertCircle, CheckCircle2,
     Type, ToggleLeft, List, Scale, BookOpen, Tag, ChevronDown, ChevronRight, Paperclip, PenLine,
-    Loader2,
+    Loader2, ScanLine, Crosshair,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,8 @@ const ANSWER_TYPE_META: Record<QuestionAnswerType, { icon: React.ElementType; la
     multiple_choice: { icon: List, label: "Multiple Choice", color: "bg-violet-100 text-violet-700" },
     file_upload: { icon: Paperclip, label: "File Upload", color: "bg-cyan-100 text-cyan-700" },
     drawing_pad: { icon: PenLine, label: "Drawing", color: "bg-fuchsia-100 text-fuchsia-700" },
+    medical_media: { icon: ScanLine, label: "Medical Media", color: "bg-teal-100 text-teal-700" },
+    body_map: { icon: Crosshair, label: "Body Map", color: "bg-rose-100 text-rose-700" },
 };
 const ANSWER_TYPES = Object.keys(ANSWER_TYPE_META) as QuestionAnswerType[];
 
