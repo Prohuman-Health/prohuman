@@ -239,14 +239,34 @@ function WeekView({
     onEmptySlotClick?: (dateStr: string, hour: number) => void;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
+    // gridRef goes on the inner flex div (height = TOTAL_H) for precise coordinate math
+    const gridRef = useRef<HTMLDivElement>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
-    const [dragOverCell, setDragOverCell] = useState<{ day: string; slot: string } | null>(null);
+    const [dropTarget, setDropTarget] = useState<{ day: string; hour: number; minute: number } | null>(null);
+    const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
     const now = new Date();
+    const TIME_W = 56; // w-14 = 3.5 rem = 56 px
+
+    // Stable refs so effect closures never go stale
+    const weekDaysRef = useRef(weekDays);
+    weekDaysRef.current = weekDays;
+    const closuresByDateRef = useRef(closuresByDate);
+    closuresByDateRef.current = closuresByDate;
+    const onSessionDropRef = useRef(onSessionDrop);
+    onSessionDropRef.current = onSessionDrop;
+    const onSessionClickRef = useRef(onSessionClick);
+    onSessionClickRef.current = onSessionClick;
+    const sessionsRef = useRef(sessions);
+    sessionsRef.current = sessions;
+    const dropTargetRef = useRef(dropTarget);
+    dropTargetRef.current = dropTarget;
+    const dragStartRef = useRef({ x: 0, y: 0 });
+
+    const now2 = now; // needed in scroll effect (stable closure reference)
 
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = Math.max(0, (now.getHours() - START_HOUR - 1) * SLOT_HEIGHT);
-        }
+        if (scrollRef.current)
+            scrollRef.current.scrollTop = Math.max(0, (now2.getHours() - START_HOUR - 1) * SLOT_HEIGHT);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [weekDays[0]?.toDateString()]);
 
@@ -260,10 +280,74 @@ function WeekView({
         return map;
     }, [sessions, weekDays]);
 
+    // ── Pointer-based drag (works on mouse + touch) ──────────────────────────
+    useEffect(() => {
+        if (!draggingId) return;
+        const { x: sx, y: sy } = dragStartRef.current;
+        let moved = false;
+
+        function onMove(e: PointerEvent) {
+            if (!moved) {
+                if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 6) return;
+                moved = true;
+            }
+            e.preventDefault();
+            setCursorPos({ x: e.clientX, y: e.clientY });
+            if (!gridRef.current) return;
+            const rect = gridRef.current.getBoundingClientRect();
+            // Y relative to content top (works even when grid is partially scrolled)
+            const y = e.clientY - rect.top;
+            const rawMin = (y / SLOT_HEIGHT) * 60;
+            const snapped = Math.round(rawMin / 15) * 15;
+            const clamped = Math.max(0, Math.min(snapped, (END_HOUR - START_HOUR) * 60));
+            const totalMin = START_HOUR * 60 + clamped;
+            const hour = Math.floor(totalMin / 60);
+            const minute = totalMin % 60;
+            // X → column index
+            const x = e.clientX - rect.left - TIME_W;
+            const colW = (rect.width - TIME_W) / 7;
+            const colIdx = Math.max(0, Math.min(6, Math.floor(x / colW)));
+            const day = weekDaysRef.current[colIdx]?.toISOString().slice(0, 10) ?? "";
+            setDropTarget({ day, hour, minute });
+        }
+
+        function onUp() {
+            if (!moved) {
+                // Short tap → treat as click
+                const s = sessionsRef.current.find(x => x.id === draggingId);
+                if (s) onSessionClickRef.current?.(s);
+            } else {
+                const target = dropTargetRef.current;
+                if (target && !closuresByDateRef.current[target.day]) {
+                    const [yr, mo, da] = target.day.split("-").map(Number);
+                    const dt = new Date(yr, mo - 1, da, target.hour, target.minute, 0, 0);
+                    onSessionDropRef.current?.(draggingId, dt.toISOString());
+                }
+            }
+            setDraggingId(null);
+            setDropTarget(null);
+        }
+
+        window.addEventListener("pointermove", onMove, { passive: false });
+        window.addEventListener("pointerup", onUp);
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+        };
+    }, [draggingId]);
+
     const TOTAL_H = HOURS.length * SLOT_HEIGHT;
 
     return (
-        <div className="bg-white rounded-2xl overflow-hidden flex flex-col">
+        <div className="bg-white rounded-2xl overflow-hidden flex flex-col select-none">
+            {/* Ghost time tooltip follows cursor */}
+            {draggingId && dropTarget && (
+                <div className="fixed z-50 pointer-events-none bg-blue-600 text-white text-[11px] font-mono px-2 py-1 rounded-lg shadow-lg"
+                    style={{ left: cursorPos.x + 18, top: cursorPos.y - 14 }}>
+                    {fmtSlotTime(dropTarget.hour, dropTarget.minute)}
+                </div>
+            )}
+
             {/* Day headers */}
             <div className="flex border-b border-border/60 shrink-0">
                 <div className="w-14 shrink-0" />
@@ -296,9 +380,10 @@ function WeekView({
 
             {/* Scrollable time grid */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ maxHeight: "68vh" }}>
-                <div className="flex" style={{ height: TOTAL_H }}>
+                {/* gridRef here — getBoundingClientRect() adjusts for scroll automatically */}
+                <div ref={gridRef} className="flex" style={{ height: TOTAL_H }}>
                     {/* Time labels */}
-                    <div className="w-14 shrink-0 relative">
+                    <div className="w-14 shrink-0 relative pointer-events-none">
                         {HOURS.map((h, i) => (
                             <div key={h} className="absolute w-full flex items-start justify-end pr-2 pt-0.5"
                                 style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
@@ -309,7 +394,7 @@ function WeekView({
                         ))}
                         {/* Current time dot */}
                         {now.getHours() >= START_HOUR && now.getHours() <= END_HOUR && (
-                            <div className="absolute w-full flex items-center z-20 pointer-events-none"
+                            <div className="absolute w-full flex items-center z-20"
                                 style={{ top: ((now.getHours() * 60 + now.getMinutes() - START_HOUR * 60) / 60) * SLOT_HEIGHT }}>
                                 <div className="w-2 h-2 rounded-full bg-red-500 ml-auto" />
                             </div>
@@ -322,6 +407,10 @@ function WeekView({
                         const daySessions = sessionsByDay[dayKey] ?? [];
                         const isClosed = !!closuresByDate[dayKey];
                         const isToday = day.toDateString() === now.toDateString();
+                        const isDropCol = !!(draggingId && dropTarget?.day === dayKey);
+                        const dropTopPx = isDropCol && dropTarget
+                            ? ((dropTarget.hour * 60 + dropTarget.minute - START_HOUR * 60) / 60) * SLOT_HEIGHT
+                            : null;
 
                         // Overlap grouping within each 30-min band
                         const bandMap: Record<string, Session[]> = {};
@@ -344,68 +433,36 @@ function WeekView({
                                         style={{ top: ((now.getHours() * 60 + now.getMinutes() - START_HOUR * 60) / 60) * SLOT_HEIGHT }} />
                                 )}
 
-                                {/* Hour rows */}
-                                {HOURS.map((h, i) => {
-                                    const s00 = `${String(h).padStart(2, "0")}:00`;
-                                    const s30 = `${String(h).padStart(2, "0")}:30`;
-                                    return (
-                                        <div key={h} className="absolute w-full"
-                                            style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
-                                            <div className="flex flex-col h-full border-t border-border/30">
-                                                {/* :00 half */}
-                                                <div className={cn(
-                                                    "flex-1 relative transition-colors cursor-pointer",
-                                                    !isClosed && draggingId
-                                                        ? (dragOverCell?.day === dayKey && dragOverCell?.slot === s00 ? "bg-blue-100" : "")
-                                                        : (!isClosed ? "hover:bg-muted/10" : "")
-                                                )}
-                                                    onClick={() => !draggingId && !isClosed && onEmptySlotClick?.(dayKey, h)}
-                                                    onDragOver={e => { e.preventDefault(); if (!isClosed) setDragOverCell({ day: dayKey, slot: s00 }); }}
-                                                    onDragLeave={() => setDragOverCell(null)}
-                                                    onDrop={e => {
-                                                        e.preventDefault(); setDragOverCell(null);
-                                                        if (isClosed) return;
-                                                        const id = e.dataTransfer.getData("sessionId");
-                                                        if (!id) return;
-                                                        const d = new Date(day); d.setHours(h, 0, 0, 0);
-                                                        onSessionDrop?.(id, d.toISOString());
-                                                    }}>
-                                                    {dragOverCell?.day === dayKey && dragOverCell?.slot === s00 && (
-                                                        <span className="absolute top-0.5 left-1 text-[9px] text-blue-600 font-mono pointer-events-none">
-                                                            {fmtSlotTime(h, 0)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {/* Dashed half-hour line */}
-                                                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20 pointer-events-none" />
-                                                {/* :30 half */}
-                                                <div className={cn(
-                                                    "flex-1 relative transition-colors cursor-pointer",
-                                                    !isClosed && draggingId
-                                                        ? (dragOverCell?.day === dayKey && dragOverCell?.slot === s30 ? "bg-blue-100" : "")
-                                                        : (!isClosed ? "hover:bg-muted/10" : "")
-                                                )}
-                                                    onClick={() => !draggingId && !isClosed && onEmptySlotClick?.(dayKey, h)}
-                                                    onDragOver={e => { e.preventDefault(); if (!isClosed) setDragOverCell({ day: dayKey, slot: s30 }); }}
-                                                    onDragLeave={() => setDragOverCell(null)}
-                                                    onDrop={e => {
-                                                        e.preventDefault(); setDragOverCell(null);
-                                                        if (isClosed) return;
-                                                        const id = e.dataTransfer.getData("sessionId");
-                                                        if (!id) return;
-                                                        const d = new Date(day); d.setHours(h, 30, 0, 0);
-                                                        onSessionDrop?.(id, d.toISOString());
-                                                    }}>
-                                                    {dragOverCell?.day === dayKey && dragOverCell?.slot === s30 && (
-                                                        <span className="absolute top-0.5 left-1 text-[9px] text-blue-600 font-mono pointer-events-none">
-                                                            {fmtSlotTime(h, 30)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                {/* Drop indicator line */}
+                                {dropTopPx !== null && dropTarget && (
+                                    <div className="absolute left-0 right-0 z-30 pointer-events-none flex items-center"
+                                        style={{ top: dropTopPx }}>
+                                        <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 -ml-1" />
+                                        <div className="flex-1 h-0.5 bg-blue-500" />
+                                    </div>
+                                )}
+
+                                {/* Empty-slot click zone */}
+                                {!isClosed && (
+                                    <div className="absolute inset-0 cursor-pointer"
+                                        onClick={e => {
+                                            if (draggingId || !gridRef.current) return;
+                                            const rect = gridRef.current.getBoundingClientRect();
+                                            const y = e.clientY - rect.top;
+                                            const snapped = Math.round((y / SLOT_HEIGHT) * 60 / 15) * 15;
+                                            const totalMin = START_HOUR * 60 + Math.max(0, snapped);
+                                            onEmptySlotClick?.(dayKey, Math.floor(totalMin / 60));
+                                        }} />
+                                )}
+
+                                {/* Hour grid lines */}
+                                {HOURS.map((h, i) => (
+                                    <div key={h} className="absolute w-full pointer-events-none"
+                                        style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
+                                        <div className="absolute top-0 left-0 right-0 border-t border-border/30" />
+                                        <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20" />
+                                    </div>
+                                ))}
 
                                 {/* Session blocks */}
                                 {daySessions.map(s => {
@@ -424,22 +481,28 @@ function WeekView({
                                     const leftPct = posInBand * widthPct;
                                     return (
                                         <div key={s.id}
-                                            draggable
-                                            onDragStart={e => { e.dataTransfer.setData("sessionId", s.id); setDraggingId(s.id); }}
-                                            onDragEnd={() => { setDraggingId(null); setDragOverCell(null); }}
-                                            onClick={e => { e.stopPropagation(); onSessionClick?.(s); }}
+                                            onPointerDown={e => {
+                                                if (isClosed) return;
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                dragStartRef.current = { x: e.clientX, y: e.clientY };
+                                                setDraggingId(s.id);
+                                                setCursorPos({ x: e.clientX, y: e.clientY });
+                                            }}
                                             className={cn(
-                                                "absolute rounded-lg border px-1.5 py-0.5 overflow-hidden cursor-grab active:cursor-grabbing z-10 hover:shadow-md transition-shadow",
-                                                draggingId === s.id && "opacity-40", bgCls
+                                                "absolute rounded-lg border px-1.5 py-0.5 overflow-hidden z-10 hover:shadow-md transition-shadow",
+                                                draggingId === s.id ? "opacity-30 cursor-grabbing" : "cursor-grab",
+                                                bgCls
                                             )}
                                             style={{
                                                 top: topPx, height: heightPx,
                                                 left: `${leftPct}%`, width: `calc(${widthPct}% - 2px)`,
+                                                touchAction: "none",
                                                 ...blockStyle,
                                             }}>
-                                            <p className="text-[10px] font-bold truncate leading-tight">{s.patient_name.split(" ")[0]}</p>
-                                            {heightPx > 30 && <p className="text-[9px] truncate opacity-80">{s.session_type_name}</p>}
-                                            {heightPx > 44 && <p className="text-[9px] opacity-60 font-mono">
+                                            <p className="text-[10px] font-bold truncate leading-tight pointer-events-none">{s.patient_name.split(" ")[0]}</p>
+                                            {heightPx > 30 && <p className="text-[9px] truncate opacity-80 pointer-events-none">{s.session_type_name}</p>}
+                                            {heightPx > 44 && <p className="text-[9px] opacity-60 font-mono pointer-events-none">
                                                 {dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                                             </p>}
                                         </div>
@@ -469,11 +532,27 @@ function DayView({
     onSessionDrop?: (sessionId: string, newScheduledAt: string) => void;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
+    // gridRef on the inner content div for getBoundingClientRect coordinate math
+    const gridRef = useRef<HTMLDivElement>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
-    const [dragOverSlot, setDragOverSlot] = useState<string | null>(null); // "HH:MM"
+    const [dropTarget, setDropTarget] = useState<{ hour: number; minute: number } | null>(null);
+    const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // Stable refs so pointer-event closures never go stale
+    const dateRef = useRef(date);
+    dateRef.current = date;
+    const onSessionDropRef = useRef(onSessionDrop);
+    onSessionDropRef.current = onSessionDrop;
+    const onSessionClickRef = useRef(onSessionClick);
+    onSessionClickRef.current = onSessionClick;
+    const sessionsRef = useRef(sessions);
+    sessionsRef.current = sessions;
+    const dropTargetRef = useRef(dropTarget);
+    dropTargetRef.current = dropTarget;
+    const dragStartRef = useRef({ x: 0, y: 0 });
 
     // Scroll to current time / business start on mount
     useEffect(() => {
@@ -484,6 +563,54 @@ function DayView({
             scrollRef.current.scrollTop = scrollTo;
         }
     }, [date]);
+
+    // Global pointer listeners while dragging (works on mouse + touch)
+    useEffect(() => {
+        if (!draggingId) return;
+        const { x: sx, y: sy } = dragStartRef.current;
+        let moved = false;
+
+        function onMove(e: PointerEvent) {
+            if (!moved) {
+                if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 6) return;
+                moved = true;
+            }
+            e.preventDefault();
+            setCursorPos({ x: e.clientX, y: e.clientY });
+            if (!gridRef.current) return;
+            const rect = gridRef.current.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const rawMin = (y / SLOT_HEIGHT) * 60;
+            const snapped = Math.round(rawMin / 15) * 15;
+            const clamped = Math.max(0, Math.min(snapped, (END_HOUR - START_HOUR) * 60));
+            const totalMin = START_HOUR * 60 + clamped;
+            setDropTarget({ hour: Math.floor(totalMin / 60), minute: totalMin % 60 });
+        }
+
+        function onUp() {
+            if (!moved) {
+                // Short tap → treat as click
+                const s = sessionsRef.current.find(x => x.id === draggingId);
+                if (s) onSessionClickRef.current?.(s);
+            } else {
+                const target = dropTargetRef.current;
+                if (target) {
+                    const dt = new Date(dateRef.current);
+                    dt.setHours(target.hour, target.minute, 0, 0);
+                    onSessionDropRef.current?.(draggingId, dt.toISOString());
+                }
+            }
+            setDraggingId(null);
+            setDropTarget(null);
+        }
+
+        window.addEventListener("pointermove", onMove, { passive: false });
+        window.addEventListener("pointerup", onUp);
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+        };
+    }, [draggingId]);
 
     // Filter sessions for this day
     const daySessions = sessions.filter(s => {
@@ -527,62 +654,43 @@ function DayView({
             )}
 
             {/* Time grid */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto">
-                <div className="relative" style={{ height: `${HOURS.length * SLOT_HEIGHT}px` }}>
+            <div ref={scrollRef} className="flex-1 overflow-y-auto select-none">
+                {/* gridRef on inner content — getBoundingClientRect() auto-corrects for scroll */}
+                <div ref={gridRef} className="relative" style={{ height: `${HOURS.length * SLOT_HEIGHT}px` }}>
+                    {/* Ghost time tooltip */}
+                    {draggingId && dropTarget && (
+                        <div className="fixed z-50 pointer-events-none bg-blue-600 text-white text-[11px] font-mono px-2 py-1 rounded-lg shadow-lg"
+                            style={{ left: cursorPos.x + 18, top: cursorPos.y - 14 }}>
+                            {fmtSlotTime(dropTarget.hour, dropTarget.minute)}
+                        </div>
+                    )}
 
-                    {/* Hour rows */}
-                    {HOURS.map((h, idx) => {
-                        const slotKey00 = `${String(h).padStart(2, "0")}:00`;
-                        const slotKey30 = `${String(h).padStart(2, "0")}:30`;
-                        return (
+                    {/* Drop indicator line */}
+                    {dropTarget && (
+                        <div className="absolute left-16 right-0 z-30 pointer-events-none flex items-center"
+                            style={{ top: `${((dropTarget.hour * 60 + dropTarget.minute - START_HOUR * 60) / 60) * SLOT_HEIGHT}px` }}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 -ml-1" />
+                            <div className="flex-1 h-0.5 bg-blue-500" />
+                        </div>
+                    )}
+
+                    {/* Hour rows — grid lines + time labels + empty-slot click */}
+                    {HOURS.map((h, idx) => (
                         <div key={h} className="absolute w-full flex"
                             style={{ top: `${idx * SLOT_HEIGHT}px`, height: `${SLOT_HEIGHT}px` }}>
                             {/* Time label */}
-                            <div className="w-16 shrink-0 pr-3 flex items-start justify-end pt-1">
+                            <div className="w-16 shrink-0 pr-3 flex items-start justify-end pt-1 pointer-events-none">
                                 <span className="text-[11px] text-muted-foreground font-mono">
                                     {h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h - 12} PM`}
                                 </span>
                             </div>
-                            {/* Hour lane — split into two 30-min drop targets */}
-                            <div className="flex-1 border-t border-border/40 relative flex flex-col">
-                                {/* Top half (:00) */}
-                                <div
-                                    className={cn("flex-1 cursor-pointer transition-colors", draggingId ? (dragOverSlot === slotKey00 ? "bg-blue-50" : "hover:bg-muted/20") : "hover:bg-muted/20")}
-                                    onClick={() => !draggingId && onEmptySlotClick?.(h)}
-                                    onDragOver={(e) => { e.preventDefault(); setDragOverSlot(slotKey00); }}
-                                    onDragLeave={() => setDragOverSlot(null)}
-                                    onDrop={(e) => {
-                                        e.preventDefault();
-                                        setDragOverSlot(null);
-                                        const id = e.dataTransfer.getData("sessionId");
-                                        if (!id || !onSessionDrop) return;
-                                        const d = new Date(date);
-                                        d.setHours(h, 0, 0, 0);
-                                        onSessionDrop(id, d.toISOString());
-                                    }}
-                                />
-                                {/* Dashed half-hour divider */}
+                            {/* Click zone */}
+                            <div className="flex-1 border-t border-border/40 relative cursor-pointer hover:bg-muted/10 transition-colors"
+                                onClick={() => { if (!draggingId) onEmptySlotClick?.(h); }}>
                                 <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20 pointer-events-none" />
-                                {/* Bottom half (:30) */}
-                                <div
-                                    className={cn("flex-1 cursor-pointer transition-colors", draggingId ? (dragOverSlot === slotKey30 ? "bg-blue-50" : "hover:bg-muted/20") : "hover:bg-muted/20")}
-                                    onClick={() => !draggingId && onEmptySlotClick?.(h)}
-                                    onDragOver={(e) => { e.preventDefault(); setDragOverSlot(slotKey30); }}
-                                    onDragLeave={() => setDragOverSlot(null)}
-                                    onDrop={(e) => {
-                                        e.preventDefault();
-                                        setDragOverSlot(null);
-                                        const id = e.dataTransfer.getData("sessionId");
-                                        if (!id || !onSessionDrop) return;
-                                        const d = new Date(date);
-                                        d.setHours(h, 30, 0, 0);
-                                        onSessionDrop(id, d.toISOString());
-                                    }}
-                                />
                             </div>
                         </div>
-                        );
-                    })}
+                    ))}
 
                     {/* Current time indicator */}
                     {isToday && currentMinutes >= START_HOUR * 60 && currentMinutes <= END_HOUR * 60 && (
@@ -618,13 +726,16 @@ function DayView({
 
                         return (
                             <div key={s.id}
-                                draggable
-                                onDragStart={(e) => { e.dataTransfer.setData("sessionId", s.id); setDraggingId(s.id); }}
-                                onDragEnd={() => { setDraggingId(null); setDragOverSlot(null); }}
-                                onClick={(e) => { e.stopPropagation(); onSessionClick?.(s); }}
+                                onPointerDown={e => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    dragStartRef.current = { x: e.clientX, y: e.clientY };
+                                    setDraggingId(s.id);
+                                    setCursorPos({ x: e.clientX, y: e.clientY });
+                                }}
                                 className={cn(
-                                    "absolute left-16 rounded-xl border px-2.5 py-1.5 overflow-hidden cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow z-10",
-                                    draggingId === s.id && "opacity-40",
+                                    "absolute rounded-xl border px-2.5 py-1.5 overflow-hidden hover:shadow-md transition-shadow z-10",
+                                    draggingId === s.id ? "opacity-30 cursor-grabbing" : "cursor-grab",
                                     bgCls
                                 )}
                                 style={{
@@ -632,12 +743,13 @@ function DayView({
                                     height: `${heightPx}px`,
                                     left: `calc(4rem + ${leftPct}%)`,
                                     width: `calc(${widthPct}% - 0.75rem)`,
+                                    touchAction: "none",
                                     ...blockStyle,
                                 }}>
-                                <p className="text-[11px] font-bold truncate leading-tight">{s.patient_name}</p>
-                                <p className="text-[10px] truncate opacity-80">{s.session_type_name}</p>
+                                <p className="text-[11px] font-bold truncate leading-tight pointer-events-none">{s.patient_name}</p>
+                                <p className="text-[10px] truncate opacity-80 pointer-events-none">{s.session_type_name}</p>
                                 {heightPx > 40 && (
-                                    <p className="text-[10px] opacity-70 font-mono">
+                                    <p className="text-[10px] opacity-70 font-mono pointer-events-none">
                                         {dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                                         {" · "}{s.duration_minutes}m
                                     </p>

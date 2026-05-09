@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const questionSchema = z.object({
   text:        z.string().min(1),
-  answer_type: z.enum(["free_text","yes_no","scale","multiple_choice","file_upload","drawing_pad"]),
+  answer_type: z.enum(["free_text","yes_no","scale","multiple_choice","file_upload","drawing_pad","body_map"]),
   options:     z.array(z.string()).optional(),
   scale_min:   z.number().int().optional(),
   scale_max:   z.number().int().optional(),
