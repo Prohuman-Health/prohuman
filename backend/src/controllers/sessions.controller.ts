@@ -103,9 +103,13 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
     let series_id: string | null = null;
 
     if (recurrence) {
+      const seriesDow = recurrence.days_of_week ?? null;
+      const seriesTotalSessions = recurrence.days_of_week?.length
+        ? (recurrence.weeks ?? 1) * recurrence.days_of_week.length  // approximate; actual count computed below
+        : recurrence.total_sessions;
       const series = await client.query(
-        "INSERT INTO session_series (recurrence, interval_days, total_sessions) VALUES ($1,$2,$3) RETURNING id",
-        [recurrence.pattern, recurrence.interval_days ?? null, recurrence.total_sessions]
+        "INSERT INTO session_series (recurrence, interval_days, total_sessions, days_of_week) VALUES ($1,$2,$3,$4) RETURNING id",
+        [recurrence.days_of_week?.length ? 'custom' : recurrence.pattern, recurrence.interval_days ?? null, seriesTotalSessions, seriesDow]
       );
       series_id = series.rows[0].id;
     }
@@ -113,21 +117,46 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
     const scheduledDate = new Date(scheduled_at);
     const sessions = [];
 
-    const totalToCreate = recurrence ? recurrence.total_sessions : 1;
-    const intervalDays = recurrence?.interval_days ?? (
-      recurrence?.pattern === "daily" ? 1 :
-        recurrence?.pattern === "weekly" ? 7 :
-          recurrence?.pattern === "biweekly" ? 14 : 7
-    );
+    // ── Compute the ordered list of dates to create sessions for ──────────────
+    let sessionDates: Date[];
+    if (recurrence?.days_of_week?.length) {
+      // Days-of-week recurrence: e.g. M-W-F (1,3,5) for N weeks
+      const weeks = recurrence.weeks ?? 1;
+      const daysOfWeek = [...recurrence.days_of_week].sort((a, b) => a - b);
+      const startDow = scheduledDate.getDay();
+      const weekSunday = new Date(scheduledDate);
+      weekSunday.setDate(weekSunday.getDate() - startDow);
+      sessionDates = [];
+      for (let w = 0; w < weeks; w++) {
+        for (const d of daysOfWeek) {
+          const candidate = new Date(weekSunday);
+          candidate.setDate(candidate.getDate() + w * 7 + d);
+          candidate.setHours(scheduledDate.getHours(), scheduledDate.getMinutes(), 0, 0);
+          if (candidate >= scheduledDate) sessionDates.push(candidate);
+        }
+      }
+    } else if (recurrence) {
+      const totalToCreate = recurrence.total_sessions!;
+      const intervalDays = recurrence.interval_days ?? (
+        recurrence.pattern === "daily" ? 1 :
+        recurrence.pattern === "weekly" ? 7 :
+        recurrence.pattern === "biweekly" ? 14 : 7
+      );
+      sessionDates = Array.from({ length: totalToCreate }, (_, n) => {
+        const d = new Date(scheduledDate);
+        if (n > 0) d.setDate(d.getDate() + intervalDays * n);
+        return d;
+      });
+    } else {
+      sessionDates = [scheduledDate];
+    }
 
     // ── Closed date + clash detection ──────────────────────────────────────────
     // Collect all clashing slots upfront so we can report them all at once
     const clashes: string[] = [];
     const closedDates: string[] = [];
 
-    for (let n = 0; n < totalToCreate; n++) {
-      const slotDate = new Date(scheduledDate);
-      if (n > 0) slotDate.setDate(slotDate.getDate() + intervalDays * n);
+    for (const slotDate of sessionDates) {
 
       const closed = await client.query(
         `SELECT closure_date FROM clinic_closures
@@ -178,9 +207,7 @@ export const createSession = asyncHandler(async (req: Request, res: Response) =>
     }
     // ── End clash detection ───────────────────────────────────────────────────
 
-    for (let n = 0; n < totalToCreate; n++) {
-      const date = new Date(scheduledDate);
-      if (n > 0) date.setDate(date.getDate() + intervalDays * n);
+    for (const date of sessionDates) {
       const row = await client.query(
         `INSERT INTO sessions (patient_id, doctor_id, branch_id, session_type_id, scheduled_at, duration_minutes,
                                pre_session_notes, series_id, treatment_plan_id, created_by)

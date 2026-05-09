@@ -20,7 +20,10 @@ export const createSessionSchema = z.object({
   recurrence: z.object({
     pattern: z.enum(["daily", "weekly", "biweekly", "custom"]),
     interval_days: z.number().int().min(1).optional(),
-    total_sessions: z.number().int().min(2).max(52),
+    total_sessions: z.number().int().min(2).max(52).optional(),
+    // Days-of-week recurrence: days_of_week=[1,3,5] + weeks=3 → M-W-F for 3 weeks
+    days_of_week: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
+    weeks: z.number().int().min(1).max(26).optional(),
   }).optional(),
 });
 

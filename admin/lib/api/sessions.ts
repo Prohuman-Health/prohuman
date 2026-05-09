@@ -9,6 +9,7 @@ export interface Session {
     form_id?: string | null;
     branch_name: string; branch_id: string;
     pre_session_notes?: string | null;
+    series_id?: string | null;
 }
 
 export interface SessionListResponse { sessions: Session[]; total: number; page: number; }
@@ -44,8 +45,17 @@ export const sessionsApi = {
     list: (params?: Record<string, string>) =>
         request<SessionListResponse>(`/sessions?${new URLSearchParams(params)}`),
     get: (id: string) => request<Session>(`/sessions/${id}`),
-    create: (data: Partial<Session> & { patient_id: string; doctor_id: string; session_type_id: string; branch_id: string }) =>
-        request<Session>("/sessions", { method: "POST", body: JSON.stringify(data) }),
+    create: (data: Partial<Session> & {
+        patient_id: string; doctor_id: string; session_type_id: string; branch_id: string;
+        recurrence?: {
+            pattern: "daily" | "weekly" | "biweekly" | "custom";
+            interval_days?: number;
+            total_sessions?: number;
+            days_of_week?: number[];
+            weeks?: number;
+        };
+    }) =>
+        request<Session | Session[]>("/sessions", { method: "POST", body: JSON.stringify(data) }),
     cancel: (id: string, reason: string) =>
         request<null>(`/sessions/${id}/cancel`, { method: "PATCH", body: JSON.stringify({ reason }) }),
     reschedule: (id: string, data: { scheduled_at: string; doctor_id?: string; reason?: string }) =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { X, Loader2, CalendarDays, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,11 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
     const [isClosedDay, setIsClosedDay] = useState(false);
     const [closedReason, setClosedReason] = useState<string | null>(null);
 
+    // Recurring
+    const [recurring, setRecurring] = useState(false);
+    const [recurDays, setRecurDays] = useState<number[]>([]);
+    const [recurWeeks, setRecurWeeks] = useState(3);
+
     // Branches — only loaded if user has no branch_id
     const [branches, setBranches] = useState<Branch[]>([]);
     const [branchesLoading, setBranchesLoading] = useState(false);
@@ -55,6 +60,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         if (!open) return;
         // Reset UI state on open
         setErrors({}); setApiError(null); setSuccess(false);
+        setRecurring(false); setRecurDays([]); setRecurWeeks(3);
         // Apply prefill values on each open
         setForm(prev => ({
             ...prev,
@@ -118,6 +124,28 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         return Object.keys(errs).length === 0;
     }
 
+    // How many sessions will be created for the recurring pattern
+    const recurSessionCount = useMemo(() => {
+        if (!recurring || !recurDays.length || !form.date) return 0;
+        const startDate = new Date(`${form.date}T00:00:00`);
+        const startDow = startDate.getDay();
+        const weekSunday = new Date(startDate);
+        weekSunday.setDate(weekSunday.getDate() - startDow);
+        let count = 0;
+        for (let w = 0; w < recurWeeks; w++) {
+            for (const d of recurDays) {
+                const candidate = new Date(weekSunday);
+                candidate.setDate(candidate.getDate() + w * 7 + d);
+                if (candidate >= startDate) count++;
+            }
+        }
+        return count;
+    }, [recurring, recurDays, recurWeeks, form.date]);
+
+    function toggleRecurDay(dow: number) {
+        setRecurDays(prev => prev.includes(dow) ? prev.filter(d => d !== dow) : [...prev, dow]);
+    }
+
     async function submit(e: React.FormEvent) {
         e.preventDefault();
         if (!validate()) return;
@@ -125,6 +153,11 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
         try {
             const scheduled_at = new Date(`${form.date}T${form.time}:00`).toISOString();
             const type = sessionTypes.find(t => t.id === form.session_type_id);
+            const recurrencePayload = recurring && recurDays.length > 0 ? {
+                pattern: "custom" as const,
+                days_of_week: recurDays,
+                weeks: recurWeeks,
+            } : undefined;
             await sessionsApi.create({
                 patient_id: form.patient_id,
                 doctor_id: form.doctor_id,
@@ -134,6 +167,7 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                 scheduled_at,
                 ...(type?.default_duration_minutes ? { duration_minutes: type.default_duration_minutes } : {}),
                 ...(form.notes.trim() ? { pre_session_notes: form.notes.trim() } : {}),
+                ...(recurrencePayload ? { recurrence: recurrencePayload } : {}),
             } as Parameters<typeof sessionsApi.create>[0]);
             await refresh();
             setSuccess(true);
@@ -285,6 +319,57 @@ export function NewSessionModal({ open, onClose, prefill }: Props) {
                                 placeholder="Any clinical notes or special instructions…"
                                 className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
                         </Field>
+
+                        {/* ── Recurring ── */}
+                        <div className="rounded-xl border border-border/60 overflow-hidden">
+                            <button type="button"
+                                onClick={() => setRecurring(r => !r)}
+                                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-left hover:bg-muted/40 transition-colors">
+                                <span>Repeat sessions?</span>
+                                <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold transition-colors",
+                                    recurring ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground")}>
+                                    {recurring ? "On" : "Off"}
+                                </span>
+                            </button>
+                            {recurring && (
+                                <div className="px-4 pb-4 space-y-3 border-t border-border/40">
+                                    <div className="pt-3 space-y-1.5">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Days of week</p>
+                                        <div className="flex gap-1.5 flex-wrap">
+                                            {["Su","Mo","Tu","We","Th","Fr","Sa"].map((label, dow) => (
+                                                <button key={dow} type="button"
+                                                    onClick={() => toggleRecurDay(dow)}
+                                                    className={cn(
+                                                        "w-9 h-9 rounded-xl text-xs font-bold transition-all border",
+                                                        recurDays.includes(dow)
+                                                            ? "bg-foreground text-white border-foreground"
+                                                            : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                                                    )}>
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 items-end">
+                                        <div className="space-y-1.5">
+                                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Weeks</p>
+                                            <Input type="number" min={1} max={26} value={recurWeeks}
+                                                onChange={e => setRecurWeeks(Math.max(1, Math.min(26, parseInt(e.target.value) || 1)))}
+                                                className="rounded-xl h-9 text-sm" />
+                                        </div>
+                                        <div className="text-sm">
+                                            {recurDays.length === 0 ? (
+                                                <p className="text-amber-600 text-xs">Select at least one day</p>
+                                            ) : (
+                                                <p className="text-emerald-700 font-semibold">
+                                                    Creates <span className="text-base">{recurSessionCount}</span> sessions
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="px-6 py-4 border-t border-border/60 flex items-center justify-end gap-3">

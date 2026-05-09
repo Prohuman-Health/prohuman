@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
     ChevronLeft, ChevronRight, Plus, Clock, RefreshCw, Filter, X,
-    CalendarDays, LayoutGrid, Ban, AlertCircle, Pencil,
+    CalendarDays, LayoutGrid, Ban, AlertCircle, Pencil, Columns2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,20 @@ function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).get
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay(); }
 function dateKey(y: number, m: number, d: number) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function getWeekDays(date: Date): Date[] {
+    const sunday = new Date(date);
+    sunday.setDate(date.getDate() - date.getDay());
+    return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(sunday);
+        d.setDate(sunday.getDate() + i);
+        return d;
+    });
+}
+function fmtSlotTime(h: number, m: number) {
+    const period = h >= 12 ? "PM" : "AM";
+    const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    return `${hour}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 function titleCase(value: string) {
@@ -204,6 +218,236 @@ function SessionEditModal({
                     <Button className="rounded-xl" onClick={handleSave} disabled={loading || !isDirty}>
                         {loading ? "Saving…" : "Save Changes"}
                     </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Week View ─────────────────────────────────────────────────────────────────
+function WeekView({
+    weekDays, sessions, doctorColorMap, sessionTypeColorMap,
+    closuresByDate, onSessionClick, onSessionDrop, onEmptySlotClick,
+}: {
+    weekDays: Date[];
+    sessions: Session[];
+    doctorColorMap: Record<string, number>;
+    sessionTypeColorMap: Record<string, string>;
+    closuresByDate: Record<string, { reason: string | null }>;
+    onSessionClick?: (s: Session) => void;
+    onSessionDrop?: (sessionId: string, newScheduledAt: string) => void;
+    onEmptySlotClick?: (dateStr: string, hour: number) => void;
+}) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const [dragOverCell, setDragOverCell] = useState<{ day: string; slot: string } | null>(null);
+    const now = new Date();
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = Math.max(0, (now.getHours() - START_HOUR - 1) * SLOT_HEIGHT);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekDays[0]?.toDateString()]);
+
+    const sessionsByDay = useMemo(() => {
+        const map: Record<string, Session[]> = {};
+        weekDays.forEach(d => { map[d.toISOString().slice(0, 10)] = []; });
+        sessions.forEach(s => {
+            const key = s.scheduled_at.slice(0, 10);
+            if (map[key] !== undefined) map[key].push(s);
+        });
+        return map;
+    }, [sessions, weekDays]);
+
+    const TOTAL_H = HOURS.length * SLOT_HEIGHT;
+
+    return (
+        <div className="bg-white rounded-2xl overflow-hidden flex flex-col">
+            {/* Day headers */}
+            <div className="flex border-b border-border/60 shrink-0">
+                <div className="w-14 shrink-0" />
+                {weekDays.map(day => {
+                    const key = day.toISOString().slice(0, 10);
+                    const isToday = day.toDateString() === now.toDateString();
+                    const closure = closuresByDate[key];
+                    const count = sessionsByDay[key]?.length ?? 0;
+                    return (
+                        <div key={key} className={cn(
+                            "flex-1 px-2 py-2.5 text-center border-l border-border/30 min-w-0",
+                            closure ? "bg-red-50/60" : ""
+                        )}>
+                            <p className={cn(
+                                "text-[11px] font-semibold uppercase tracking-wide",
+                                isToday ? "text-blue-600" : "text-muted-foreground"
+                            )}>{DAYS[day.getDay()]}</p>
+                            <p className={cn(
+                                "text-base font-bold mt-0.5 w-8 h-8 flex items-center justify-center mx-auto rounded-full",
+                                isToday ? "bg-blue-600 text-white" : "text-foreground"
+                            )}>{day.getDate()}</p>
+                            {closure
+                                ? <p className="text-[9px] text-red-500 font-medium mt-0.5">Closed</p>
+                                : count > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{count} session{count > 1 ? "s" : ""}</p>
+                            }
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Scrollable time grid */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ maxHeight: "68vh" }}>
+                <div className="flex" style={{ height: TOTAL_H }}>
+                    {/* Time labels */}
+                    <div className="w-14 shrink-0 relative">
+                        {HOURS.map((h, i) => (
+                            <div key={h} className="absolute w-full flex items-start justify-end pr-2 pt-0.5"
+                                style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                    {h === 12 ? "12p" : h < 12 ? `${h}a` : `${h - 12}p`}
+                                </span>
+                            </div>
+                        ))}
+                        {/* Current time dot */}
+                        {now.getHours() >= START_HOUR && now.getHours() <= END_HOUR && (
+                            <div className="absolute w-full flex items-center z-20 pointer-events-none"
+                                style={{ top: ((now.getHours() * 60 + now.getMinutes() - START_HOUR * 60) / 60) * SLOT_HEIGHT }}>
+                                <div className="w-2 h-2 rounded-full bg-red-500 ml-auto" />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 7 day columns */}
+                    {weekDays.map(day => {
+                        const dayKey = day.toISOString().slice(0, 10);
+                        const daySessions = sessionsByDay[dayKey] ?? [];
+                        const isClosed = !!closuresByDate[dayKey];
+                        const isToday = day.toDateString() === now.toDateString();
+
+                        // Overlap grouping within each 30-min band
+                        const bandMap: Record<string, Session[]> = {};
+                        daySessions.forEach(s => {
+                            const dt = new Date(s.scheduled_at);
+                            const band = `${dt.getHours()}:${dt.getMinutes() < 30 ? "00" : "30"}`;
+                            if (!bandMap[band]) bandMap[band] = [];
+                            bandMap[band].push(s);
+                        });
+
+                        return (
+                            <div key={dayKey} className={cn(
+                                "flex-1 relative border-l border-border/30 min-w-0",
+                                isToday ? "bg-blue-50/20" : "",
+                                isClosed ? "bg-red-50/30" : ""
+                            )} style={{ height: TOTAL_H }}>
+                                {/* Current time line extension */}
+                                {isToday && now.getHours() >= START_HOUR && now.getHours() <= END_HOUR && (
+                                    <div className="absolute left-0 right-0 h-px bg-red-500 z-20 pointer-events-none"
+                                        style={{ top: ((now.getHours() * 60 + now.getMinutes() - START_HOUR * 60) / 60) * SLOT_HEIGHT }} />
+                                )}
+
+                                {/* Hour rows */}
+                                {HOURS.map((h, i) => {
+                                    const s00 = `${String(h).padStart(2, "0")}:00`;
+                                    const s30 = `${String(h).padStart(2, "0")}:30`;
+                                    return (
+                                        <div key={h} className="absolute w-full"
+                                            style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
+                                            <div className="flex flex-col h-full border-t border-border/30">
+                                                {/* :00 half */}
+                                                <div className={cn(
+                                                    "flex-1 relative transition-colors cursor-pointer",
+                                                    !isClosed && draggingId
+                                                        ? (dragOverCell?.day === dayKey && dragOverCell?.slot === s00 ? "bg-blue-100" : "")
+                                                        : (!isClosed ? "hover:bg-muted/10" : "")
+                                                )}
+                                                    onClick={() => !draggingId && !isClosed && onEmptySlotClick?.(dayKey, h)}
+                                                    onDragOver={e => { e.preventDefault(); if (!isClosed) setDragOverCell({ day: dayKey, slot: s00 }); }}
+                                                    onDragLeave={() => setDragOverCell(null)}
+                                                    onDrop={e => {
+                                                        e.preventDefault(); setDragOverCell(null);
+                                                        if (isClosed) return;
+                                                        const id = e.dataTransfer.getData("sessionId");
+                                                        if (!id) return;
+                                                        const d = new Date(day); d.setHours(h, 0, 0, 0);
+                                                        onSessionDrop?.(id, d.toISOString());
+                                                    }}>
+                                                    {dragOverCell?.day === dayKey && dragOverCell?.slot === s00 && (
+                                                        <span className="absolute top-0.5 left-1 text-[9px] text-blue-600 font-mono pointer-events-none">
+                                                            {fmtSlotTime(h, 0)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {/* Dashed half-hour line */}
+                                                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/20 pointer-events-none" />
+                                                {/* :30 half */}
+                                                <div className={cn(
+                                                    "flex-1 relative transition-colors cursor-pointer",
+                                                    !isClosed && draggingId
+                                                        ? (dragOverCell?.day === dayKey && dragOverCell?.slot === s30 ? "bg-blue-100" : "")
+                                                        : (!isClosed ? "hover:bg-muted/10" : "")
+                                                )}
+                                                    onClick={() => !draggingId && !isClosed && onEmptySlotClick?.(dayKey, h)}
+                                                    onDragOver={e => { e.preventDefault(); if (!isClosed) setDragOverCell({ day: dayKey, slot: s30 }); }}
+                                                    onDragLeave={() => setDragOverCell(null)}
+                                                    onDrop={e => {
+                                                        e.preventDefault(); setDragOverCell(null);
+                                                        if (isClosed) return;
+                                                        const id = e.dataTransfer.getData("sessionId");
+                                                        if (!id) return;
+                                                        const d = new Date(day); d.setHours(h, 30, 0, 0);
+                                                        onSessionDrop?.(id, d.toISOString());
+                                                    }}>
+                                                    {dragOverCell?.day === dayKey && dragOverCell?.slot === s30 && (
+                                                        <span className="absolute top-0.5 left-1 text-[9px] text-blue-600 font-mono pointer-events-none">
+                                                            {fmtSlotTime(h, 30)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {/* Session blocks */}
+                                {daySessions.map(s => {
+                                    const dt = new Date(s.scheduled_at);
+                                    const startMin = dt.getHours() * 60 + dt.getMinutes();
+                                    const topPx = ((startMin - START_HOUR * 60) / 60) * SLOT_HEIGHT;
+                                    const heightPx = Math.max((s.duration_minutes / 60) * SLOT_HEIGHT, 20);
+                                    const colorIdx = doctorColorMap[s.doctor_id] ?? 0;
+                                    const stHex = sessionTypeColorMap[s.session_type_name];
+                                    const bgCls = stHex ? undefined : SESSION_BG[colorIdx % SESSION_BG.length];
+                                    const blockStyle = stHex ? { backgroundColor: stHex + "18", borderColor: stHex + "60", color: stHex } : undefined;
+                                    const band = `${dt.getHours()}:${dt.getMinutes() < 30 ? "00" : "30"}`;
+                                    const bandSessions = bandMap[band] ?? [];
+                                    const posInBand = bandSessions.findIndex(x => x.id === s.id);
+                                    const widthPct = bandSessions.length > 1 ? 100 / bandSessions.length : 100;
+                                    const leftPct = posInBand * widthPct;
+                                    return (
+                                        <div key={s.id}
+                                            draggable
+                                            onDragStart={e => { e.dataTransfer.setData("sessionId", s.id); setDraggingId(s.id); }}
+                                            onDragEnd={() => { setDraggingId(null); setDragOverCell(null); }}
+                                            onClick={e => { e.stopPropagation(); onSessionClick?.(s); }}
+                                            className={cn(
+                                                "absolute rounded-lg border px-1.5 py-0.5 overflow-hidden cursor-grab active:cursor-grabbing z-10 hover:shadow-md transition-shadow",
+                                                draggingId === s.id && "opacity-40", bgCls
+                                            )}
+                                            style={{
+                                                top: topPx, height: heightPx,
+                                                left: `${leftPct}%`, width: `calc(${widthPct}% - 2px)`,
+                                                ...blockStyle,
+                                            }}>
+                                            <p className="text-[10px] font-bold truncate leading-tight">{s.patient_name.split(" ")[0]}</p>
+                                            {heightPx > 30 && <p className="text-[9px] truncate opacity-80">{s.session_type_name}</p>}
+                                            {heightPx > 44 && <p className="text-[9px] opacity-60 font-mono">
+                                                {dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                            </p>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         </div>
@@ -436,8 +680,10 @@ export default function CalendarPage() {
     const [closuresLoading, setClosuresLoading] = useState(false);
     const [settingsClosedDates, setSettingsClosedDates] = useState<string[]>([]);
     const [settingsWeeklyClosedDays, setSettingsWeeklyClosedDays] = useState<number[]>([]);
-    // "month" | "day"
-    const [viewMode, setViewMode] = useState<"month" | "day">("month");
+    // "month" | "week" | "day"
+    const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
+
+    const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
 
     const doctorColorMap = useMemo(() => {
         const map: Record<string, number> = {};
@@ -604,6 +850,12 @@ export default function CalendarPage() {
         setScheduleOpen(true);
     }
 
+    function openEmptyWeekSlot(dateStr: string, hour: number) {
+        setSelectedDateForModal(dateStr);
+        setSelectedTimeForModal(`${String(hour).padStart(2, "0")}:00`);
+        setScheduleOpen(true);
+    }
+
     function openExistingSession(session: Session) {
         setSelectedSession(session);
         setEditError(null);
@@ -651,6 +903,11 @@ export default function CalendarPage() {
                             className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                                 viewMode === "month" ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
                             <LayoutGrid className="w-3.5 h-3.5" /> Month
+                        </button>
+                        <button onClick={() => { setViewMode("week"); if (!selectedDay) setSelectedDay(today.getDate()); }}
+                            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                viewMode === "week" ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground")}>
+                            <Columns2 className="w-3.5 h-3.5" /> Week
                         </button>
                         <button onClick={() => { setViewMode("day"); if (!selectedDay) setSelectedDay(today.getDate()); }}
                             className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
@@ -926,6 +1183,39 @@ export default function CalendarPage() {
                             onSessionClick={openExistingSession}
                             onEmptySlotClick={(hour) => openEmptyTimeSlot(hour, dateKey(viewYear, viewMonth, selectedDay ?? today.getDate()))}
                             onSessionDrop={handleSessionDrop}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* ── WEEK VIEW ──────────────────────────────────────────────── */}
+            {viewMode === "week" && (
+                <div className="flex gap-4 flex-1">
+                    {/* Week nav sidebar */}
+                    <div className="hidden lg:flex flex-col gap-1 w-8 shrink-0 mt-1">
+                        <button onClick={() => {
+                            const d = new Date(selectedDate); d.setDate(d.getDate() - 7);
+                            setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); setSelectedDay(d.getDate());
+                        }} className="w-8 h-8 rounded-xl bg-white border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => {
+                            const d = new Date(selectedDate); d.setDate(d.getDate() + 7);
+                            setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); setSelectedDay(d.getDate());
+                        }} className="w-8 h-8 rounded-xl bg-white border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex-1 min-h-[600px]">
+                        <WeekView
+                            weekDays={weekDays}
+                            sessions={filteredSessions}
+                            doctorColorMap={doctorColorMap}
+                            sessionTypeColorMap={sessionTypeColorMap}
+                            closuresByDate={closuresByDate}
+                            onSessionClick={openExistingSession}
+                            onSessionDrop={handleSessionDrop}
+                            onEmptySlotClick={openEmptyWeekSlot}
                         />
                     </div>
                 </div>
