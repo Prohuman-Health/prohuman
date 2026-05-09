@@ -318,7 +318,7 @@ function WeekView({
                 if (s) onSessionClickRef.current?.(s);
             } else {
                 const target = dropTargetRef.current;
-                if (target && !closuresByDateRef.current[target.day]) {
+                if (target && draggingId && !closuresByDateRef.current[target.day]) {
                     const [yr, mo, da] = target.day.split("-").map(Number);
                     const dt = new Date(yr, mo - 1, da, target.hour, target.minute, 0, 0);
                     onSessionDropRef.current?.(draggingId, dt.toISOString());
@@ -594,7 +594,7 @@ function DayView({
                 if (s) onSessionClickRef.current?.(s);
             } else {
                 const target = dropTargetRef.current;
-                if (target) {
+                if (target && draggingId) {
                     const dt = new Date(dateRef.current);
                     dt.setHours(target.hour, target.minute, 0, 0);
                     onSessionDropRef.current?.(draggingId, dt.toISOString());
