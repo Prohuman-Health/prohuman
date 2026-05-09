@@ -683,8 +683,6 @@ export default function CalendarPage() {
     // "month" | "week" | "day"
     const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
 
-    const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
-
     const doctorColorMap = useMemo(() => {
         const map: Record<string, number> = {};
         doctors.forEach((d, i) => { map[d.id] = i; });
@@ -826,6 +824,7 @@ export default function CalendarPage() {
     const selectedSessions = (selectedKey ? (sessionsByDate[selectedKey] ?? []) : [])
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
     const selectedDate = selectedDay ? new Date(viewYear, viewMonth, selectedDay) : today;
+    const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
 
     function prevMonth() {
         if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
