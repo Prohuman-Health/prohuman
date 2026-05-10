@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, CalendarDays, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle, QrCode, Smartphone, LogOut } from "lucide-react";
+    Bell, Lock, Globe, Database, Save, Loader2, Building2, Phone, Mail, MapPin, Clock, CalendarDays, IndianRupee, RefreshCw, Plus, Trash2, Pencil, X, Tag, Download, AlertCircle, QrCode, Smartphone, LogOut, Wallet, Settings2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { settingsApi, Setting, patientsApi, staffApi, sessionsApi, patientLabelsApi, PatientLabel, whatsappApi, WhatsAppAuthStatus, ApiError } from "@/lib/api";
 
-type Tab = "clinic" | "notifications" | "security" | "locale" | "data" | "labels";
+type Tab = "clinic" | "notifications" | "security" | "locale" | "data" | "labels" | "cash";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType; color: string }[] = [
     { id: "clinic", label: "Clinic Profile", icon: Building2, color: "bg-violet-100 text-violet-700" },
@@ -18,6 +18,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType; color: string }[]
     { id: "locale", label: "Timezone & Locale", icon: Globe, color: "bg-blue-100 text-blue-700" },
     { id: "labels", label: "Patient Labels", icon: Tag, color: "bg-pink-100 text-pink-700" },
     { id: "data", label: "Data & Backups", icon: Database, color: "bg-emerald-100 text-emerald-700" },
+    { id: "cash", label: "Cash Register", icon: Wallet, color: "bg-teal-100 text-teal-700" },
 ];
 
 const TIMEZONES = ["Asia/Kolkata", "Asia/Dubai", "Asia/Singapore", "Europe/London", "America/New_York", "America/Los_Angeles"];
@@ -440,6 +441,11 @@ export default function SettingsPage() {
                                 <DataBackupTab />
                             )}
 
+                            {/* ── Cash Register ───────────────────────── */}
+                            {activeTab === "cash" && (
+                                <CashSettingsTab get={get} setSettings={setSettings} />
+                            )}
+
                             {/* ── Labels ──────────────────────────────────── */}
                             {activeTab === "labels" && (
                                 <PatientLabelsTab />
@@ -447,7 +453,7 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Save footer */}
-                        {activeTab !== "data" && activeTab !== "labels" && (
+                        {activeTab !== "data" && activeTab !== "labels" && activeTab !== "cash" && (
                             <div className="px-6 py-4 border-t border-border/60 flex items-center justify-end gap-3">
                                 {saved && <span className="text-xs text-emerald-600 font-medium">Changes saved ✓</span>}
                                 <Button onClick={save} disabled={saving} className="rounded-xl gap-2">
@@ -532,6 +538,66 @@ function downloadCsv(filename: string, rows: string[][]) {
     const a = document.createElement("a");
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
+}
+
+// ── Cash Register Settings Tab ────────────────────────────────────────────────
+function CashSettingsTab({
+    get,
+    setSettings,
+}: {
+    get: (k: string, fallback?: string) => string;
+    setSettings: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}) {
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved]   = useState(false);
+
+    const scope = (get("cash_receptionist_view_scope", "monthly") as string).replace(/"/g, "");
+
+    async function saveScope(val: string) {
+        setSettings(prev => ({ ...prev, cash_receptionist_view_scope: val }));
+        setSaving(true);
+        try {
+            const { settingsApi } = await import("@/lib/api");
+            await settingsApi.upsert("cash_receptionist_view_scope", val);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+        } catch {/* ignore */}
+        finally { setSaving(false); }
+    }
+
+    return (
+        <Section title="Cash Register" desc="Control what the reception staff can see in the Cash Register.">
+            <div className="flex items-center justify-between py-3 border-b border-border/60">
+                <div>
+                    <p className="text-sm font-medium">Receptionist view scope</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">How much of the cash register history the receptionist can see.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Select value={scope} onValueChange={saveScope}>
+                        <SelectTrigger className="w-40 rounded-xl text-sm h-9">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="daily">Daily only (today)</SelectItem>
+                            <SelectItem value="weekly">Weekly (7 days)</SelectItem>
+                            <SelectItem value="monthly">Full month</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {saving && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                    {saved  && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                </div>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-4 flex items-center justify-between gap-3 mt-2">
+                <div>
+                    <p className="text-sm font-semibold">View Cash Register</p>
+                    <p className="text-xs text-muted-foreground mt-1">Open the full cash collection sheet to add debits or review collections.</p>
+                </div>
+                <a href="/cash" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-foreground text-white text-xs font-medium hover:opacity-90 transition-opacity">
+                    <Wallet className="w-3.5 h-3.5" /> Open
+                </a>
+            </div>
+        </Section>
+    );
 }
 
 // ── Data Backup Tab ────────────────────────────────────────────────────────────

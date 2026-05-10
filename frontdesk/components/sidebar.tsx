@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
     LayoutDashboard, Users, Stethoscope, CalendarClock, CalendarDays,
-    Settings, LogOut, X, Receipt,
+    Settings, LogOut, X, Receipt, Wallet, MessagesSquare, Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -17,6 +17,9 @@ const menuItems = [
     { href: "/sessions", label: "Sessions", icon: CalendarClock },
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/invoices", label: "Invoices", icon: Receipt },
+    { href: "/cash", label: "Cash Register", icon: Wallet },
+    { href: "/messages", label: "Messages", icon: MessagesSquare },
+    { href: "/inventory", label: "Inventory", icon: Package },
 ];
 
 const generalItems = [

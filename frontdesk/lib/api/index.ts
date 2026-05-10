@@ -19,4 +19,7 @@ export * from "./branches";
 export * from "./inbox";
 export * from "./patientLabels";
 export * from "./invoices";
+export * from "./cash";
+export * from "./messaging";
+export * from "./inventory";
 

@@ -27,6 +27,9 @@ import patientLabelRoutes from "./patientLabels.routes";
 import onboardingRoutes from "./onboarding.routes";
 import dashboardRoutes from "./dashboard.routes";
 import gcalRoutes from "./gcal.routes";
+import cashRoutes from "./cash.routes";
+import messagingRoutes from "./messaging.routes";
+import inventoryRoutes from "./inventory.routes";
 
 const router = Router();
 
@@ -58,5 +61,8 @@ router.use("/patient-labels", patientLabelRoutes);
 router.use("/onboarding", onboardingRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/gcal", gcalRoutes);
+router.use("/cash", cashRoutes);
+router.use("/messages", messagingRoutes);
+router.use("/inventory", inventoryRoutes);
 
 export default router;
