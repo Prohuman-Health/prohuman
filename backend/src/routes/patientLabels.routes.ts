@@ -14,9 +14,13 @@ router.delete("/labels/:id", authorize("admin"), c.deleteLabel);
 // Patient label map (all patients → their labels)
 router.get("/labels-map",                       c.listPatientsWithLabels);
 
-// Per-patient assignments
+// Per-patient assignments + audit
 router.get(   "/:patientId/labels",             c.getPatientLabels);
+router.get(   "/:patientId/label-audit",        c.getPatientLabelAudit);
 router.post(  "/:patientId/labels",             c.assignLabel);
 router.delete("/:patientId/labels/:labelId",    c.removeLabel);
+
+// Clinic-wide recent label activity (admin only)
+router.get("/label-activity", authorize("admin"), c.getRecentLabelActivity);
 
 export default router;

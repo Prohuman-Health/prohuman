@@ -57,20 +57,72 @@ export const getPatientLabels = asyncHandler(async (req: Request, res: Response)
 export const assignLabel = asyncHandler(async (req: Request, res: Response) => {
   const { label_id } = req.body;
   if (!label_id) throw ApiError.badRequest("label_id is required");
+
+  // Fetch label details for snapshot
+  const labelRow = await query(`SELECT name, color FROM patient_label_definitions WHERE id = $1`, [label_id]);
+  const label = labelRow.rows[0];
+
+  // Fetch actor name snapshot
+  const actorRow = await query(`SELECT full_name FROM staff WHERE id = $1`, [req.user!.sub]);
+  const actorName: string = actorRow.rows[0]?.full_name ?? "Unknown";
+
   await query(
-    `INSERT INTO patient_label_assignments (patient_id, label_id)
-     VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [req.params.patientId, label_id]
+    `INSERT INTO patient_label_assignments (patient_id, label_id, assigned_by)
+     VALUES ($1, $2, $3) ON CONFLICT (patient_id, label_id) DO UPDATE SET assigned_by = EXCLUDED.assigned_by`,
+    [req.params.patientId, label_id, req.user!.sub]
   );
+
+  // Write audit
+  await query(
+    `INSERT INTO patient_label_audit (patient_id, label_id, action, actor_id, actor_name, label_name, label_color)
+     VALUES ($1, $2, 'assigned', $3, $4, $5, $6)`,
+    [req.params.patientId, label_id, req.user!.sub, actorName, label?.name ?? "", label?.color ?? ""]
+  );
+
   ApiResponse.created(res, { patient_id: req.params.patientId, label_id });
 });
 
 export const removeLabel = asyncHandler(async (req: Request, res: Response) => {
+  // Fetch label details for snapshot
+  const labelRow = await query(`SELECT name, color FROM patient_label_definitions WHERE id = $1`, [req.params.labelId]);
+  const label = labelRow.rows[0];
+  const actorRow = await query(`SELECT full_name FROM staff WHERE id = $1`, [req.user!.sub]);
+  const actorName: string = actorRow.rows[0]?.full_name ?? "Unknown";
+
   await query(
     `DELETE FROM patient_label_assignments WHERE patient_id = $1 AND label_id = $2`,
     [req.params.patientId, req.params.labelId]
   );
+
+  // Write audit
+  await query(
+    `INSERT INTO patient_label_audit (patient_id, label_id, action, actor_id, actor_name, label_name, label_color)
+     VALUES ($1, $2, 'removed', $3, $4, $5, $6)`,
+    [req.params.patientId, req.params.labelId, req.user!.sub, actorName, label?.name ?? "", label?.color ?? ""]
+  );
+
   ApiResponse.noContent(res);
+});
+
+// ── Label audit log ──────────────────────────────────────────────────────────
+export const getPatientLabelAudit = asyncHandler(async (req: Request, res: Response) => {
+  const result = await query(
+    `SELECT * FROM patient_label_audit WHERE patient_id = $1 ORDER BY created_at DESC LIMIT 100`,
+    [req.params.patientId]
+  );
+  ApiResponse.ok(res, result.rows);
+});
+
+// ── Clinic-wide recent label activity (admin) ────────────────────────────────
+export const getRecentLabelActivity = asyncHandler(async (req: Request, res: Response) => {
+  const result = await query(
+    `SELECT a.*, p.full_name AS patient_name, p.patient_code
+     FROM patient_label_audit a
+     JOIN patients p ON p.id = a.patient_id
+     ORDER BY a.created_at DESC LIMIT 50`,
+    []
+  );
+  ApiResponse.ok(res, result.rows);
 });
 
 // ── Bulk: list all patients with their labels ────────────────────────────────

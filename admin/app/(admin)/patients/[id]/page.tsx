@@ -5,14 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import {
     ArrowLeft, Phone, Mail, Calendar, Hash, User, Tag,
     CalendarDays, Receipt, Activity, Stethoscope, AlertCircle,
-    Pencil, Plus, X, Clock, FileText, Trash2, AlertTriangle,
+    Pencil, Plus, X, Clock, FileText, Trash2, AlertTriangle, History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
     patientsApi, patientLabelsApi, invoicesApi, sessionsApi,
-    Patient, PatientSession, PatientInvoice, TimelineItem, PatientLabel, SessionFormData,
+    Patient, PatientSession, PatientInvoice, TimelineItem, PatientLabel, SessionFormData, LabelAuditEntry,
 } from "@/lib/api";
 import { EditPatientModal } from "@/components/modals/edit-patient-modal";
 import { NewSessionModal } from "@/components/modals/new-session-modal";
@@ -467,6 +467,7 @@ export default function PatientDetailPage() {
     const [deleteError, setDeleteError] = useState<string | null>(null);
     const [labelDefs, setLabelDefs]   = useState<PatientLabel[]>([]);
     const [patientLabels, setPatientLabels] = useState<PatientLabel[]>([]);
+    const [labelAudit, setLabelAudit]   = useState<LabelAuditEntry[]>([]);
     const [assigningLabel, setAssigningLabel] = useState(false);
     const [labelSelectKey, setLabelSelectKey] = useState(0);
 
@@ -489,12 +490,14 @@ export default function PatientDetailPage() {
 
     const loadLabels = useCallback(async () => {
         try {
-            const [defs, mine] = await Promise.all([
+            const [defs, mine, audit] = await Promise.all([
                 patientLabelsApi.listDefinitions(),
                 patientLabelsApi.getForPatient(patientId),
+                patientLabelsApi.getAudit(patientId),
             ]);
             setLabelDefs(defs);
             setPatientLabels(mine);
+            setLabelAudit(audit);
         } catch { /* silent */ }
     }, [patientId]);
 
@@ -662,8 +665,29 @@ export default function PatientDetailPage() {
                                     {unassignedLabels.map(l => <SelectItem key={l.id} value={l.id} className="rounded-lg text-xs">{l.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                        )}
-                    </div>
+                        )}                        {/* Label audit history */}
+                        {labelAudit.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-border/60">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <History className="w-3 h-3" /> History
+                                </p>
+                                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                                    {labelAudit.map(e => (
+                                        <div key={e.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: e.label_color || '#94a3b8' }} />
+                                            <span className={cn("font-medium", e.action === 'assigned' ? 'text-emerald-600' : 'text-red-500')}>
+                                                {e.action === 'assigned' ? 'Added' : 'Removed'}
+                                            </span>
+                                            <span style={{ color: e.label_color }}>{e.label_name}</span>
+                                            <span>by <span className="font-medium text-foreground">{e.actor_name ?? '—'}</span></span>
+                                            <span className="ml-auto shrink-0">
+                                                {new Date(e.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}                    </div>
                 </div>
 
                 {/* ── RIGHT: Tabs ────────────────────────────────────────── */}
