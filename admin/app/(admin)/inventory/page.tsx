@@ -437,7 +437,7 @@ export default function InventoryPage() {
             </div>
 
             {/* Dialogs */}
-            {(editItem === "new" || (editItem && editItem !== "new")) && (
+            {editItem != null && (
                 <ItemFormDialog
                     item={editItem === "new" ? null : editItem}
                     onClose={() => setEditItem(null)}
